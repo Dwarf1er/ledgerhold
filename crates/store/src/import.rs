@@ -49,6 +49,13 @@ pub struct BatchInfo {
     pub rows_error: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AccountStats {
+    pub count: usize,
+    pub first: Option<NaiveDate>,
+    pub last: Option<NaiveDate>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredTxn {
     pub id: String,
@@ -301,6 +308,20 @@ impl Store {
             });
         }
         Ok(out)
+    }
+
+    /// Transaction count and first/last transaction date for an account.
+    pub fn account_stats(&self, account_id: &str) -> Result<AccountStats> {
+        let (count, first, last): (i64, Option<String>, Option<String>) = self.conn.query_row(
+            "SELECT COUNT(*), MIN(date), MAX(date) FROM transactions WHERE account_id = ?1",
+            params![account_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?;
+        Ok(AccountStats {
+            count: count as usize,
+            first: first.as_deref().map(s2d).transpose()?,
+            last: last.as_deref().map(s2d).transpose()?,
+        })
     }
 
     pub fn batch_errors(&self, batch_id: &str) -> Result<Vec<(String, String)>> {

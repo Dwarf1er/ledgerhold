@@ -17,6 +17,7 @@ ledgerhold-core.workspace = true
 ledgerhold-parsers = { path = "../parsers" }
 ledgerhold-ofx = { path = "../ofx" }
 ledgerhold-store = { path = "../store" }
+ledgerhold-app = { path = "../app" }
 chrono = { workspace = true, features = ["clock"] }
 clap = { version = "4", features = ["derive", "env"] }
 anyhow = "1"

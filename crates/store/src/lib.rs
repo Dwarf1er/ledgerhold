@@ -9,7 +9,7 @@ mod schema;
 
 pub use accounts::{Account, Anchor, Institution, NewAccount, Person};
 pub use balances::{BalanceReport, Discrepancy, PointKind};
-pub use import::{BatchInfo, ImportMeta, ImportOutcome, ImportPreview, StoredTxn};
+pub use import::{AccountStats, BatchInfo, ImportMeta, ImportOutcome, ImportPreview, StoredTxn};
 
 use chrono::NaiveDate;
 use ledgerhold_core::Money;

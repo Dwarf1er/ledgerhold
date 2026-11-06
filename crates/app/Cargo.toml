@@ -1,0 +1,17 @@
+[package]
+name = "ledgerhold-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ledgerhold-core.workspace = true
+ledgerhold-parsers = { path = "../parsers" }
+ledgerhold-ofx = { path = "../ofx" }
+ledgerhold-store = { path = "../store" }
+chrono.workspace = true
+serde.workspace = true
+anyhow = "1"
+
+[dev-dependencies]
+serde_json = "1"

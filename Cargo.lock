@@ -553,12 +553,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "ledgerhold-app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "ledgerhold-core",
+ "ledgerhold-ofx",
+ "ledgerhold-parsers",
+ "ledgerhold-store",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ledgerhold-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "ledgerhold-app",
  "ledgerhold-core",
  "ledgerhold-ofx",
  "ledgerhold-parsers",
