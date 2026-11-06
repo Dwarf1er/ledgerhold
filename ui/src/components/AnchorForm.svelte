@@ -53,7 +53,7 @@
     </div>
     <div class="field">
       <label for="anc-amt">Balance at end of that day ({currency})</label>
-      <input id="anc-amt" class="input mono" inputmode="decimal" placeholder="0.00" bind:value={amount} autocomplete="off" required />
+      <input id="anc-amt" class="input tnum" inputmode="decimal" placeholder="0.00" bind:value={amount} autocomplete="off" required />
     </div>
     <div class="field grow">
       <label for="anc-note">Note <span class="muted">(optional)</span></label>

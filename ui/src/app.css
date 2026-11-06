@@ -147,6 +147,12 @@ a {
   color: var(--fg-3);
 }
 
+/* Figures in the UI font: tabular so columns line up, without mono's wide punctuation. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
 ::selection {
   background: var(--accent-bg);
 }

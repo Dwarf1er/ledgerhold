@@ -169,7 +169,7 @@
 {:else}
   <PageHeader title={acct.name} back={{ href: links.overview(), label: 'Overview' }}>
     {#snippet subtitle()}
-      <span>{acct.institutionName} · {kindLabel(acct.kind)}{#if acct.number} · {maskNumber(acct.number)}{/if}</span>
+      <span>{[acct.institutionName, kindLabel(acct.kind), maskNumber(acct.number)].filter(Boolean).join(' · ')}</span>
       {#if owners.length}
         <span class="owners">{#each owners as p (p.id)}<Avatar name={p.name} size={20} />{/each}</span>
         <span>{owners.map((p) => p.name).join(' & ')}</span>
@@ -185,7 +185,7 @@
     <div class="stat">
       <div class="label">Balance today</div>
       {#if summary.balance !== null}
-        <div class="big mono"><Money minor={summary.balance} currency={cur} /></div>
+        <div class="big tnum"><Money minor={summary.balance} currency={cur} /></div>
       {:else}
         <div class="big none">—</div>
         <a class="link" href={links.account(id, 'balance')}>Set a starting balance</a>
@@ -193,7 +193,7 @@
     </div>
     <div class="stat">
       <div class="label">Transactions</div>
-      <div class="big mono">{summary.txnCount}</div>
+      <div class="big tnum">{summary.txnCount}</div>
     </div>
     <div class="stat">
       <div class="label">History</div>
@@ -220,7 +220,7 @@
         {/if}
         <span class="totals muted">
           {#if txns.length}
-            In <span class="mono pos">{formatSigned(inflow, cur)}</span> · Out <span class="mono">{formatSigned(outflow, cur)}</span>
+            In <span class="tnum pos">{formatSigned(inflow, cur)}</span> · Out <span class="tnum">{formatSigned(outflow, cur)}</span>
           {/if}
         </span>
       </div>
@@ -306,7 +306,7 @@
                   {#if r.ok}<Badge tone="green">Matches</Badge>{:else}<Badge tone="red">Off by {formatMoney(Math.abs(r.difference), cur)}</Badge>{/if}
                 </div>
                 <div class="rec-nums muted">
-                  Expected <span class="mono">{formatMoney(r.expected, cur)}</span> · Reported <span class="mono">{formatMoney(r.actual, cur)}</span>
+                  Expected <span class="tnum">{formatMoney(r.expected, cur)}</span> · Reported <span class="tnum">{formatMoney(r.actual, cur)}</span>
                 </div>
                 {#if !r.ok}<div class="rec-why">{explain(r)}</div>{/if}
               </div>
@@ -361,9 +361,9 @@
                     <div class="muted small">{b.parser} · {formatDate(b.importedAt.slice(0, 10))}</div>
                   </td>
                   <td class="muted">{#if b.periodStart}{formatShortDate(b.periodStart)} – {formatShortDate(b.periodEnd!)}{/if}</td>
-                  <td class="num mono">{b.rowsNew}</td>
-                  <td class="num mono muted">{b.rowsDuplicate}</td>
-                  <td class="num mono">{#if b.rowsError}<Badge tone="amber">{b.rowsError}</Badge>{:else}<span class="muted">0</span>{/if}</td>
+                  <td class="num tnum">{b.rowsNew}</td>
+                  <td class="num tnum muted">{b.rowsDuplicate}</td>
+                  <td class="num tnum">{#if b.rowsError}<Badge tone="amber">{b.rowsError}</Badge>{:else}<span class="muted">0</span>{/if}</td>
                   <td class="act">
                     <Button variant="ghost" size="sm" onclick={() => { undoBatch = b; undoOpen = true; }}><Icon name="undo" size={14} /> Undo</Button>
                   </td>

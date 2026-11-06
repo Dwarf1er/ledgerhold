@@ -1,0 +1,12 @@
+{
+  "name": "ledgerhold-screenshots",
+  "private": true,
+  "type": "module",
+  "description": "Regenerates assets/screenshots from the UI's demo data (run `npm run shoot`)",
+  "scripts": {
+    "shoot": "node shoot.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.0"
+  }
+}

@@ -1,0 +1,41 @@
+# Maintainer: Antoine Poulin
+#
+# Installs the release builds: the desktop app (from the .deb the release publishes) and the `ledgerhold` CLI.
+# After tagging a release, bump pkgver and run `updpkgsums` to fill in the checksums, then publish with
+# `makepkg --printsrcinfo > .SRCINFO` and push to the AUR.
+pkgname=ledgerhold-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Household bank ledger: import, dedupe, reconcile and export OFX (desktop app + CLI)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/Dwarf1er/ledgerhold'
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3')
+provides=('ledgerhold')
+conflicts=('ledgerhold')
+options=('!strip')
+
+_release="$url/releases/download/v$pkgver"
+source=("LICENSE-$pkgver::https://raw.githubusercontent.com/Dwarf1er/ledgerhold/v$pkgver/LICENSE")
+source_x86_64=("$_release/Ledgerhold_${pkgver}_amd64.deb"
+               "$_release/ledgerhold-cli-$pkgver-linux-x64.tar.gz")
+source_aarch64=("$_release/Ledgerhold_${pkgver}_arm64.deb"
+                "$_release/ledgerhold-cli-$pkgver-linux-arm64.tar.gz")
+noextract=("Ledgerhold_${pkgver}_amd64.deb" "Ledgerhold_${pkgver}_arm64.deb")
+sha256sums=('SKIP')
+sha256sums_x86_64=('SKIP' 'SKIP')
+sha256sums_aarch64=('SKIP' 'SKIP')
+
+package() {
+  case "$CARCH" in
+    x86_64)  _deb="Ledgerhold_${pkgver}_amd64.deb"; _cli="ledgerhold-cli-$pkgver-linux-x64" ;;
+    aarch64) _deb="Ledgerhold_${pkgver}_arm64.deb"; _cli="ledgerhold-cli-$pkgver-linux-arm64" ;;
+  esac
+
+  # A .deb is an ar archive holding data.tar.*: the files to install.
+  bsdtar -xf "$_deb" -C "$srcdir" 'data.tar.*'
+  bsdtar -xf "$srcdir"/data.tar.* -C "$pkgdir"
+
+  install -Dm755 "$srcdir/$_cli/ledgerhold" "$pkgdir/usr/bin/ledgerhold"
+  install -Dm644 "$srcdir/LICENSE-$pkgver" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

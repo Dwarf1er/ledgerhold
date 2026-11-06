@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 #[derive(Parser, Debug)]
 #[command(name = "ledgerhold", version, about = "Household bank ledger: import, dedupe, reconcile, export OFX")]
 pub struct Cli {
-    /// Database file (default: $XDG_DATA_HOME/ledgerhold/ledgerhold.sqlite)
+    /// Database file (default: ledgerhold/ledgerhold.sqlite in your platform's data directory)
     #[arg(long, env = "LEDGERHOLD_DB", global = true)]
     pub db: Option<PathBuf>,
     #[command(subcommand)]

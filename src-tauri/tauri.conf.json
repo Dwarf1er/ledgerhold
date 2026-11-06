@@ -41,7 +41,8 @@
     "license": "MIT",
     "licenseFile": "../LICENSE",
     "macOS": {
-      "minimumSystemVersion": "12.0"
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-"
     },
     "linux": {
       "deb": {

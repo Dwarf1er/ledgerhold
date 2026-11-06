@@ -35,6 +35,8 @@
   const unanchored = $derived(rows.filter((s) => s.balance === null));
   const hasJoint = $derived(app.person !== 'all' && rows.some((s) => s.account.ownerIds.length > 1));
   const filterItems = $derived([{ id: 'all', label: 'Everyone' }, ...people.map((p) => ({ id: p.id, label: p.name }))]);
+  const details = (a: { institutionName: string; kind: string; number: string | null }) =>
+    [a.institutionName, kindLabel(a.kind), maskNumber(a.number)].filter(Boolean).join(' · ');
   const ownersOf = (ids: string[]) => ids.map((id) => people.find((p) => p.id === id)).filter((p) => !!p);
 </script>
 
@@ -65,10 +67,10 @@
     {#each totals as t (t.currency)}
       <div class="card stat">
         <div class="label">Net balance · {t.currency}</div>
-        <div class="big mono">{formatMoney(t.net, t.currency)}</div>
+        <div class="big tnum">{formatMoney(t.net, t.currency)}</div>
         <div class="sub muted">
-          <span>Assets <span class="mono">{formatMoney(t.assets, t.currency)}</span></span>
-          {#if t.owed < 0}<span>Owed <span class="mono">{formatMoney(Math.abs(t.owed), t.currency)}</span></span>{/if}
+          <span>Assets <span class="tnum">{formatMoney(t.assets, t.currency)}</span></span>
+          {#if t.owed < 0}<span>Owed <span class="tnum">{formatMoney(Math.abs(t.owed), t.currency)}</span></span>{/if}
         </div>
       </div>
     {/each}
@@ -92,7 +94,7 @@
         <span class="main">
           <span class="name">{s.account.name}</span>
           <span class="meta muted">
-            {s.account.institutionName} · {kindLabel(s.account.kind)}{#if s.account.number} · {maskNumber(s.account.number)}{/if}
+            {details(s.account)}
           </span>
         </span>
         <span class="owners" aria-label="Owners">
@@ -108,7 +110,7 @@
         </span>
         <span class="bal">
           {#if s.balance !== null}
-            <strong class="mono"><Money minor={s.balance} currency={s.account.currency} /></strong>
+            <strong class="tnum"><Money minor={s.balance} currency={s.account.currency} /></strong>
           {:else}
             <Badge tone="amber">Set starting balance</Badge>
           {/if}
@@ -140,9 +142,6 @@
     line-height: 36px;
     font-weight: 600;
     letter-spacing: -0.03em;
-  }
-  .stat:not(.attention) .big {
-    font-family: var(--mono);
   }
   .sub {
     display: flex;

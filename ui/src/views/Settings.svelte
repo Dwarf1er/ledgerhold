@@ -148,7 +148,7 @@
       <div class="line acct">
         <span class="ico"><Icon name={s.account.kind === 'credit_card' ? 'card' : 'bank'} size={14} /></span>
         <a class="nm" href={links.account(s.account.id)}>{s.account.name}</a>
-        <span class="muted">{s.account.institutionName} · {kindLabel(s.account.kind)} · {s.account.currency}{#if s.account.number} · {maskNumber(s.account.number)}{/if}</span>
+        <span class="muted">{[s.account.institutionName, kindLabel(s.account.kind), s.account.currency, maskNumber(s.account.number)].filter(Boolean).join(' · ')}</span>
         <span class="push owners">
           {#each ownersOf(s.account.ownerIds) as p (p.id)}<Avatar name={p.name} size={20} />{/each}
           <Button variant="ghost" size="sm" onclick={() => editOwners(s)}>Owners</Button>

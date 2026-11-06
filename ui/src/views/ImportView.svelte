@@ -147,6 +147,11 @@
     }
   }
 
+  const meta = (p: ImportPreview) =>
+    [p.fileName, p.period && `${formatShortDate(p.period[0])} – ${formatDate(p.period[1])}`, p.accountHint]
+      .filter(Boolean)
+      .join(' · ');
+
   function again() {
     path = null;
     preview = null;
@@ -244,8 +249,7 @@
         <div class="pill"><Badge>{preview.duplicateCount} duplicate{preview.duplicateCount === 1 ? '' : 's'}</Badge></div>
         {#if preview.errors.length}<div class="pill"><Badge tone="amber">{preview.errors.length} unreadable</Badge></div>{/if}
         <span class="meta muted">
-          {preview.fileName}{#if preview.period} · {formatShortDate(preview.period[0])} – {formatDate(preview.period[1])}{/if}
-          {#if preview.accountHint} · {preview.accountHint}{/if}
+          {meta(preview)}
         </span>
       </div>
 

@@ -1,0 +1,107 @@
+name: ci
+
+# Tests on every push and pull request on all three desktop OSes, lints the whole workspace (including the Tauri
+# shell), builds the Docker image and runs it for real, and proves the from-source installer works on Linux.
+# Packaging the desktop installers is exercised by the release workflow's dry run (Actions > release > Run workflow).
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: cargo test
+      - run: npm ci --prefix ui
+      - run: npm --prefix ui run check
+      - run: npm --prefix ui test
+      - run: npm --prefix ui run build
+
+  lint:
+    name: Clippy (whole workspace)
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          components: clippy
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Tauri system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libxdo-dev patchelf
+      # The Tauri shell embeds the built UI at compile time.
+      - run: npm ci --prefix ui && npm --prefix ui run build
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  docker:
+    name: Docker image
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build -t ledgerhold:ci .
+      - run: scripts/smoke-docker.sh ledgerhold:ci
+
+  install-linux:
+    name: install.sh (Linux)
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libxdo-dev patchelf desktop-file-utils
+
+      - name: Install from source
+        run: ./install.sh
+
+      - name: Verify the install
+        run: |
+          set -euo pipefail
+          "$HOME/.local/bin/ledgerhold" --version
+          test -x "$HOME/.local/bin/ledgerhold-desktop"
+          desktop-file-validate "$HOME/.local/share/applications/ledgerhold.desktop"
+          test -f "$HOME/.local/share/icons/hicolor/512x512/apps/ledgerhold.png"
+
+      - name: Uninstall removes everything it installed
+        run: |
+          set -euo pipefail
+          ./install.sh -u
+          test ! -e "$HOME/.local/bin/ledgerhold"
+          test ! -e "$HOME/.local/bin/ledgerhold-desktop"
+          test ! -e "$HOME/.local/share/applications/ledgerhold.desktop"

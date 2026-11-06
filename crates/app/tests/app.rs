@@ -259,3 +259,23 @@ fn helpers() {
     assert_eq!(parse_month("2026-12").unwrap().1, d(2026, 12, 31));
     assert!(parse_month("2026-13").is_err() && parse_month("nope").is_err());
 }
+
+#[test]
+fn database_location_follows_each_platforms_conventions() {
+    use std::collections::HashMap;
+    let env = |pairs: &[(&str, &str)]| {
+        let m: HashMap<String, std::ffi::OsString> = pairs.iter().map(|(k, v)| (k.to_string(), (*v).into())).collect();
+        move |k: &str| m.get(k).cloned()
+    };
+    let p = |os, e: &dyn Fn(&str) -> Option<std::ffi::OsString>| db_path_for(os, e).to_string_lossy().replace('\\', "/");
+
+    assert_eq!(p("linux", &env(&[("HOME", "/home/a")])), "/home/a/.local/share/ledgerhold/ledgerhold.sqlite");
+    assert_eq!(p("linux", &env(&[("HOME", "/home/a"), ("XDG_DATA_HOME", "/data")])), "/data/ledgerhold/ledgerhold.sqlite");
+    assert_eq!(p("macos", &env(&[("HOME", "/Users/a")])), "/Users/a/Library/Application Support/ledgerhold/ledgerhold.sqlite");
+    // Windows has no HOME: it must use LOCALAPPDATA, never the working directory.
+    assert_eq!(p("windows", &env(&[("LOCALAPPDATA", "C:/Users/a/AppData/Local")])), "C:/Users/a/AppData/Local/ledgerhold/ledgerhold.sqlite");
+    assert_eq!(p("windows", &env(&[("APPDATA", "C:/Users/a/AppData/Roaming")])), "C:/Users/a/AppData/Roaming/ledgerhold/ledgerhold.sqlite");
+    // Nothing known: still produces a usable path.
+    assert_eq!(p("linux", &env(&[])), "./ledgerhold/ledgerhold.sqlite");
+    assert_eq!(p("windows", &env(&[("HOME", "/ignored")])), "./ledgerhold/ledgerhold.sqlite");
+}

@@ -93,8 +93,8 @@ export function createMockApi(opts: { today?: string } = {}): Api {
     if (dom === 5) push('a-joint', date, -6990, 'VIDEOTRON');
     if (dom === 12) push('a-joint', date, -between(7800, 12000), 'HYDRO-QUEBEC');
     if (dom === 20) {
-      push('a-joint', date, -90000, 'PAIEMENT VISA');
-      push('a-visa', date, 90000, 'PAIEMENT CAISSE');
+      push('a-joint', date, -55000, 'PAIEMENT VISA');
+      push('a-visa', date, 55000, 'PAIEMENT CAISSE');
     }
     if (dow === 6) push('a-joint', date, -between(8000, 19000), groceries[between(0, 3)]);
     if (rand() < 0.35) push('a-joint', date, -between(450, 780), coffee[between(0, 2)]);

@@ -120,7 +120,7 @@
     {#if shown && hover !== null}
       <div class="tip" style="left:{Math.min(Math.max(x(hover), 70), width - 70)}px">
         <span class="muted">{formatDate(shown.date)}</span>
-        <strong class="mono">{formatMoney(shown.balance, currency)}</strong>
+        <strong class="tnum">{formatMoney(shown.balance, currency)}</strong>
       </div>
     {/if}
   {/if}

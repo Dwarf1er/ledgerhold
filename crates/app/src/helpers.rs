@@ -4,15 +4,26 @@ use anyhow::{Context, Result, bail};
 use chrono::NaiveDate;
 use ledgerhold_core::ParsedStatement;
 use ledgerhold_store::Account;
+use std::ffi::OsString;
 use std::path::PathBuf;
 
-/// Default database location, shared by CLI and GUI so both see the same data.
+/// Default database location, shared by CLI and GUI so both see the same data:
+/// `%LOCALAPPDATA%\ledgerhold` on Windows, `~/Library/Application Support/ledgerhold` on macOS,
+/// `$XDG_DATA_HOME` (or `~/.local/share`) `/ledgerhold` elsewhere.
 pub fn default_db_path() -> PathBuf {
-    let base = std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
-        .unwrap_or_else(|| PathBuf::from("."));
-    base.join("ledgerhold").join("ledgerhold.sqlite")
+    db_path_for(std::env::consts::OS, &|k| std::env::var_os(k))
+}
+
+/// The pure part of [`default_db_path`], so every OS can be tested from any OS.
+pub fn db_path_for(os: &str, env: &dyn Fn(&str) -> Option<OsString>) -> PathBuf {
+    let home = || env("HOME").map(PathBuf::from);
+    let base = match os {
+        "windows" => env("LOCALAPPDATA").or_else(|| env("APPDATA")).map(PathBuf::from),
+        "macos" => home().map(|h| h.join("Library").join("Application Support")),
+        _ => env("XDG_DATA_HOME").map(PathBuf::from).or_else(|| home().map(|h| h.join(".local").join("share"))),
+    };
+    // Last resort keeps working (in the current directory) rather than failing to start.
+    base.unwrap_or_else(|| PathBuf::from(".")).join("ledgerhold").join("ledgerhold.sqlite")
 }
 
 pub fn norm_number(s: &str) -> String {

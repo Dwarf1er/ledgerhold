@@ -8,7 +8,7 @@
   }: { minor: number; currency?: string; signed?: boolean; tint?: boolean } = $props();
 </script>
 
-<span class="mono" class:pos={tint && minor > 0}>{signed ? formatSigned(minor, currency) : formatMoney(minor, currency)}</span>
+<span class="tnum" class:pos={tint && minor > 0}>{signed ? formatSigned(minor, currency) : formatMoney(minor, currency)}</span>
 
 <style>
   .pos {

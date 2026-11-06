@@ -4,7 +4,7 @@
 # and inspects each installer without installing it.
 set -euo pipefail
 
-out=${1:?staging directory}
+out=$(cd "${1:?staging directory}" && pwd)   # absolute: later steps change directory
 version=${2:?version}
 rid=${3:?rid}
 root=$(cd "$(dirname "$0")/.." && pwd)
