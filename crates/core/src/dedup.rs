@@ -38,7 +38,15 @@ pub fn dedup_key(account_id: &str, date: NaiveDate, amount: Money, description: 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExistingTxn {
     pub dedup_key: String,
-    pub fitid: Option<String>,
+    /// Every id that identifies this row: its source FITID and its export FITID.
+    pub ids: Vec<String>,
+    /// True if the row came with a real source FITID (so it is a distinct,
+    /// bank-identified transaction), false if its ids are only derived.
+    pub has_source_id: bool,
+}
+
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,62 +80,84 @@ impl ImportPlan {
     }
 }
 
-pub fn plan_import(account_id: &str, incoming: &[ParsedTransaction], existing: &[ExistingTxn]) -> ImportPlan {
-    let existing_fitids: HashMap<&str, &str> = existing
-        .iter()
-        .filter_map(|e| e.fitid.as_deref().map(|f| (f, e.dedup_key.as_str())))
-        .collect();
-
-    // Remaining existing capacity per key (rows not claimed by a fitid match).
-    let mut capacity: HashMap<&str, usize> = HashMap::new();
-    for e in existing {
-        *capacity.entry(e.dedup_key.as_str()).or_default() += 1;
+fn take(map: &mut HashMap<String, usize>, key: &str) -> bool {
+    match map.get_mut(key) {
+        Some(n) if *n > 0 => {
+            *n -= 1;
+            true
+        }
+        _ => false,
     }
+}
 
-    // Pass 1: fitid matches claim an existing row (also guards against the same
-    // fitid appearing twice in one file).
-    let mut seen_fitids: HashSet<&str> = HashSet::new();
-    let mut fitid_dup: Vec<bool> = vec![false; incoming.len()];
-    for (i, t) in incoming.iter().enumerate() {
-        if let Some(f) = t.fitid.as_deref() {
-            let in_store = existing_fitids.get(f);
-            let repeated = !seen_fitids.insert(f);
-            if let Some(key) = in_store {
-                fitid_dup[i] = true;
-                if let Some(c) = capacity.get_mut(key) {
-                    *c = c.saturating_sub(1);
-                }
-            } else if repeated {
-                fitid_dup[i] = true;
-            }
+pub fn plan_import(account_id: &str, incoming: &[ParsedTransaction], existing: &[ExistingTxn]) -> ImportPlan {
+    let mut by_id: HashMap<&str, usize> = HashMap::new();
+    let mut cap_all: HashMap<String, usize> = HashMap::new();
+    let mut cap_unsourced: HashMap<String, usize> = HashMap::new();
+    for (i, e) in existing.iter().enumerate() {
+        for id in &e.ids {
+            by_id.insert(id.as_str(), i);
+        }
+        *cap_all.entry(e.dedup_key.clone()).or_default() += 1;
+        if !e.has_source_id {
+            *cap_unsourced.entry(e.dedup_key.clone()).or_default() += 1;
         }
     }
 
-    // Pass 2: assign occurrence indices and decide.
+    // Pass 1: an incoming id that already exists claims that stored row (also
+    // marks a fitid repeated within the file as a duplicate).
+    let mut claimed = vec![false; existing.len()];
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut matched = vec![false; incoming.len()];
+    for (i, t) in incoming.iter().enumerate() {
+        let Some(f) = t.fitid.as_deref() else { continue };
+        let first_in_file = seen.insert(f);
+        if let Some(&ei) = by_id.get(f) {
+            matched[i] = true;
+            if !std::mem::replace(&mut claimed[ei], true) {
+                let e = &existing[ei];
+                take(&mut cap_all, &e.dedup_key);
+                if !e.has_source_id {
+                    take(&mut cap_unsourced, &e.dedup_key);
+                }
+            }
+        } else if !first_in_file {
+            matched[i] = true;
+        }
+    }
+
+    // Pass 2: decide the rest and assign in-file occurrence indices.
     let mut occurrences: HashMap<String, u32> = HashMap::new();
-    let mut consumed: HashMap<String, usize> = HashMap::new();
     let mut items = Vec::with_capacity(incoming.len());
     for (i, t) in incoming.iter().enumerate() {
         let key = dedup_key(account_id, t.date, t.amount, &t.description);
-        let occ = {
-            let o = occurrences.entry(key.clone()).or_default();
-            let cur = *o;
-            *o += 1;
-            cur
-        };
-        let disposition = if t.fitid.is_some() {
-            if fitid_dup[i] { Disposition::Duplicate } else { Disposition::New }
-        } else {
-            let cap = capacity.get(key.as_str()).copied().unwrap_or(0);
-            let used = consumed.entry(key.clone()).or_default();
-            if *used < cap {
-                *used += 1;
-                Disposition::Duplicate
-            } else {
-                Disposition::New
+        let o = occurrences.entry(key.clone()).or_default();
+        let occurrence = *o;
+        *o += 1;
+        let duplicate = if matched[i] {
+            true
+        } else if t.fitid.is_some() {
+            // New bank id: may still be the same transaction as a row imported
+            // earlier WITHOUT a bank id (e.g. from CSV). Never steal a row that
+            // carries a different source id.
+            let hit = take(&mut cap_unsourced, &key);
+            if hit {
+                take(&mut cap_all, &key);
             }
+            hit
+        } else {
+            let hit = take(&mut cap_all, &key);
+            if hit {
+                take(&mut cap_unsourced, &key);
+            }
+            hit
         };
-        items.push(PlanItem { index: i, disposition, dedup_key: key, occurrence: occ });
+        items.push(PlanItem {
+            index: i,
+            disposition: if duplicate { Disposition::Duplicate } else { Disposition::New },
+            dedup_key: key,
+            occurrence,
+        });
     }
     ImportPlan { items }
 }
@@ -158,7 +188,8 @@ mod tests {
         rows.iter()
             .map(|t| ExistingTxn {
                 dedup_key: dedup_key(ACCT, t.date, t.amount, &t.description),
-                fitid: t.fitid.clone(),
+                ids: t.fitid.iter().cloned().collect(),
+                has_source_id: t.fitid.is_some(),
             })
             .collect()
     }
@@ -248,5 +279,47 @@ mod tests {
         let plan = plan_import(ACCT, &[a.clone(), a], &[]);
         assert_eq!(plan.new_count(), 1);
         assert_eq!(plan.duplicate_count(), 1);
+    }
+
+    #[test]
+    fn new_bank_id_matches_row_previously_imported_without_one() {
+        // CSV first (no fitid), OFX later (fitid never seen): same transaction.
+        let csv = tx(1, -500, "COFFEE");
+        let mut ofx = tx(1, -500, "COFFEE");
+        ofx.fitid = Some("BANK-1".into());
+        assert_eq!(plan_import(ACCT, &[ofx], &stored(&[csv])).duplicate_count(), 1);
+    }
+
+    #[test]
+    fn new_bank_id_does_not_steal_a_row_with_a_different_bank_id() {
+        let mut old = tx(1, -500, "COFFEE");
+        old.fitid = Some("BANK-1".into());
+        let mut other = tx(1, -500, "COFFEE");
+        other.fitid = Some("BANK-2".into());
+        assert_eq!(plan_import(ACCT, &[other], &stored(&[old])).new_count(), 1);
+    }
+
+    #[test]
+    fn export_ids_count_as_ids() {
+        // A row stored from CSV carries only a derived export id; re-importing our
+        // own OFX export (which uses that id) must be recognised.
+        let csv = tx(1, -500, "COFFEE");
+        let mut ex = stored(&[csv]);
+        ex[0].ids.push("LH-abc-0".into());
+        let mut back = tx(1, -500, "COFFEE");
+        back.fitid = Some("LH-abc-0".into());
+        assert_eq!(plan_import(ACCT, &[back], &ex).duplicate_count(), 1);
+    }
+
+    #[test]
+    fn one_unsourced_row_absorbs_only_one_incoming_bank_id() {
+        let csv = tx(1, -500, "COFFEE");
+        let mk = |id: &str| {
+            let mut t = tx(1, -500, "COFFEE");
+            t.fitid = Some(id.into());
+            t
+        };
+        let plan = plan_import(ACCT, &[mk("B1"), mk("B2")], &stored(&[csv]));
+        assert_eq!((plan.duplicate_count(), plan.new_count()), (1, 1));
     }
 }

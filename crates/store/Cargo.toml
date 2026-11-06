@@ -6,3 +6,11 @@ license.workspace = true
 
 [dependencies]
 ledgerhold-core.workspace = true
+ledgerhold-ofx = { path = "../ofx" }
+chrono.workspace = true
+thiserror.workspace = true
+rusqlite = { version = "0.37", features = ["bundled"] }
+uuid = { version = "1", features = ["v7"] }
+
+[dev-dependencies]
+ledgerhold-parsers = { path = "../parsers" }
