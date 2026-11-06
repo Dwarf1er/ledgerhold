@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["crates/core", "crates/parsers", "crates/store", "crates/ofx", "crates/cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+sha2 = "0.10"
+hex = "0.4"
+ledgerhold-core = { path = "crates/core" }
