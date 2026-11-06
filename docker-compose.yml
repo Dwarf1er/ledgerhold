@@ -1,0 +1,22 @@
+# Self-hosted Ledgerhold. Copy .env.example to .env, set a password, then:
+#   docker compose up -d
+services:
+  ledgerhold:
+    build: .
+    image: ledgerhold:local
+    container_name: ledgerhold
+    restart: unless-stopped
+    ports:
+      - "${LEDGERHOLD_PORT:-3000}:3000"
+    environment:
+      # Required: the one password the whole household shares (8+ characters).
+      LEDGERHOLD_PASSWORD: ${LEDGERHOLD_PASSWORD:?Set LEDGERHOLD_PASSWORD in .env (8+ characters)}
+      # Your timezone, so "today" and month boundaries are right (e.g. America/Toronto).
+      TZ: ${TZ:-UTC}
+      # Behind a reverse proxy that changes the Host header, list the public address:
+      # LEDGERHOLD_ALLOWED_ORIGINS: https://ledger.example.com
+    volumes:
+      - ledgerhold-data:/data
+
+volumes:
+  ledgerhold-data:

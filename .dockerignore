@@ -1,0 +1,16 @@
+# Keep the build context small and the image reproducible.
+.git
+.gitignore
+target
+node_modules
+ui/node_modules
+ui/dist
+src-tauri
+fixtures
+tools
+packaging
+.github
+*.md
+*.sqlite
+*.sqlite-*
+.env

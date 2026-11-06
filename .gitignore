@@ -5,3 +5,4 @@ node_modules
 /fixtures/private
 /ui/dist
 /src-tauri/gen
+.env

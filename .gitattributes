@@ -1,0 +1,6 @@
+* text=auto
+# Fixtures are byte-exact test inputs (BOMs, CRLF, PDFs): never let Git rewrite line endings.
+fixtures/** -text
+*.pdf binary
+*.png binary
+*.sh text eol=lf
