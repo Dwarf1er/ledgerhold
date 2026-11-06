@@ -1,0 +1,78 @@
+{
+  "EOP-12345": [
+    {
+      "date": "2026-01-02",
+      "amount_cents": 250000,
+      "memo": "PAIE ACME INC",
+      "balance_cents": 320000
+    },
+    {
+      "date": "2026-01-03",
+      "amount_cents": -8417,
+      "memo": "ACHAT EPICERIE #123",
+      "balance_cents": 311583
+    },
+    {
+      "date": "2026-01-03",
+      "amount_cents": -450,
+      "memo": "CAFE",
+      "balance_cents": 311133
+    },
+    {
+      "date": "2026-01-03",
+      "amount_cents": -450,
+      "memo": "CAFE",
+      "balance_cents": 310683
+    },
+    {
+      "date": "2026-01-05",
+      "amount_cents": 5000,
+      "memo": "VIREMENT INTERAC RECU",
+      "balance_cents": 315683
+    },
+    {
+      "date": "2026-01-06",
+      "amount_cents": -120000,
+      "memo": "PRELEVEMENT LOYER, JANVIER",
+      "balance_cents": 195683
+    },
+    {
+      "date": "2026-01-07",
+      "amount_cents": 12,
+      "memo": "INTERETS",
+      "balance_cents": 195695
+    },
+    {
+      "date": "2026-01-08",
+      "amount_cents": -250,
+      "memo": "FRAIS DE SERVICE",
+      "balance_cents": 195445
+    },
+    {
+      "date": "2026-01-09",
+      "amount_cents": 1000,
+      "memo": "DEPOT GUICHET",
+      "balance_cents": 196445
+    },
+    {
+      "date": "2026-01-11",
+      "amount_cents": -300,
+      "memo": "SANS SOLDE",
+      "balance_cents": null
+    }
+  ],
+  "PR1-67890": [
+    {
+      "date": "2026-01-04",
+      "amount_cents": 50000,
+      "memo": "TRANSFERT RECU",
+      "balance_cents": 50000
+    },
+    {
+      "date": "2026-01-15",
+      "amount_cents": -10000,
+      "memo": "RETRAIT",
+      "balance_cents": 40000
+    }
+  ]
+}

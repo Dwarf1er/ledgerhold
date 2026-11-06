@@ -2,6 +2,7 @@
 //! [`ParsedStatement`]s (one per account/currency found in the file).
 
 mod common;
+pub mod desjardins;
 pub mod wealthsimple;
 pub mod wealthsimple_credit;
 
@@ -29,6 +30,7 @@ pub trait StatementParser {
 /// All built-in parsers.
 pub fn all() -> Vec<Box<dyn StatementParser>> {
     vec![
+        Box::new(desjardins::Desjardins),
         Box::new(wealthsimple::Wealthsimple),
         Box::new(wealthsimple_credit::WealthsimpleCredit::default()),
     ]
