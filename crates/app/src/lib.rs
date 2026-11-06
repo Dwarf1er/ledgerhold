@@ -4,6 +4,7 @@
 
 pub mod dto;
 pub mod helpers;
+pub mod rpc;
 mod service;
 
 pub use helpers::{default_db_path, kebab, month_bounds, parse_month, select_statement};

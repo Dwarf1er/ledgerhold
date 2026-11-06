@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["crates/core", "crates/parsers", "crates/store", "crates/ofx", "crates/app", "crates/cli", "src-tauri"]
+members = ["crates/core", "crates/parsers", "crates/store", "crates/ofx", "crates/app", "crates/cli", "crates/server", "src-tauri"]
 # Day-to-day `cargo test`/`cargo build` skip the (slow to compile) desktop shell; use `-p ledgerhold-desktop`.
-default-members = ["crates/core", "crates/parsers", "crates/store", "crates/ofx", "crates/app", "crates/cli"]
+default-members = ["crates/core", "crates/parsers", "crates/store", "crates/ofx", "crates/app", "crates/cli", "crates/server"]
 
 [workspace.package]
 version = "0.1.0"
