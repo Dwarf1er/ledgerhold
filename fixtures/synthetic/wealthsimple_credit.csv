@@ -1,0 +1,11 @@
+﻿transaction_date,post_date,type,details,amount,currency
+2026-01-02,2026-01-03,Purchase,Gas station,45.10,CAD
+2026-01-03,2026-01-04,Purchase,"Restaurant, downtown",-62.30,CAD
+2026-01-05,2026-01-06,Payment,Payment from chequing,200.00,CAD
+2026-01-06,2026-01-07,Refund,Online store refund,-15.00,CAD
+2026-01-07,2026-01-08,Cashback reward,Monthly cashback,3.21,CAD
+2026-01-08,2026-01-09,Reversal,Duplicate charge reversal,12.00,CAD
+2026-01-09,2026-01-10,Interest,Interest charge,8.75,CAD
+2026-01-10,2026-01-12,Purchase,Hotel abroad,150.00,USD
+2026-xx-11,2026-01-12,Purchase,Bad date row,10.00,CAD
+2026-01-12,,Purchase,No post date,7.00,CAD

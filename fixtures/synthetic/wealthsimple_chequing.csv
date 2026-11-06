@@ -1,0 +1,11 @@
+date,description,amount,balance
+2026-01-02,"Payroll deposit, ACME INC",2500.00,3200.00
+2026-01-03,Grocery store #123,-84.17,3115.83
+2026-01-03,Coffee,-4.50,3111.33
+2026-01-03,Coffee,-4.50,3106.83
+2026-01-05,E-transfer to roommate,-300.00,
+2026-01-06,Rent & utilities <Jan>,-1200.00,1606.83
+2026-13-45,Row with an impossible date,-1.00,0.00
+2026-01-08,Interest,0.12,1606.95
+2026-01-09,Row with a bad amount,abc,1606.95
+2026-01-10,"Quoted ""name"" purchase",-19.99,1586.96
