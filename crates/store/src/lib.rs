@@ -7,7 +7,7 @@ mod export;
 mod import;
 mod schema;
 
-pub use accounts::{Account, Anchor, NewAccount, Person};
+pub use accounts::{Account, Anchor, Institution, NewAccount, Person};
 pub use balances::{BalanceReport, Discrepancy, PointKind};
 pub use import::{BatchInfo, ImportMeta, ImportOutcome, ImportPreview, StoredTxn};
 

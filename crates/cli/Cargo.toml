@@ -4,5 +4,19 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "ledgerhold_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ledgerhold"
+path = "src/main.rs"
+
 [dependencies]
 ledgerhold-core.workspace = true
+ledgerhold-parsers = { path = "../parsers" }
+ledgerhold-ofx = { path = "../ofx" }
+ledgerhold-store = { path = "../store" }
+chrono = { workspace = true, features = ["clock"] }
+clap = { version = "4", features = ["derive", "env"] }
+anyhow = "1"

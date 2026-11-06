@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 ledgerhold-core.workspace = true
+ledgerhold-ofx = { path = "../ofx" }
 chrono = { workspace = true, features = ["clock"] }
 thiserror.workspace = true
 csv = "1"

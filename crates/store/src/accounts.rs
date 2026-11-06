@@ -9,6 +9,13 @@ pub struct Person {
     pub name: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Institution {
+    pub id: String,
+    pub name: String,
+    pub ofx_bank_id: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct NewAccount {
     pub institution_id: String,
@@ -71,6 +78,12 @@ impl Store {
             params![id, name, ofx_bank_id],
         )?;
         Ok(id)
+    }
+
+    pub fn list_institutions(&self) -> Result<Vec<Institution>> {
+        let mut st = self.conn.prepare("SELECT id, name, ofx_bank_id FROM institution ORDER BY name, id")?;
+        let rows = st.query_map([], |r| Ok(Institution { id: r.get(0)?, name: r.get(1)?, ofx_bank_id: r.get(2)? }))?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
     pub fn add_account(&mut self, a: &NewAccount) -> Result<String> {
