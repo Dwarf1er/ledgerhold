@@ -3,3 +3,5 @@ node_modules
 *.sqlite
 *.sqlite-*
 /fixtures/private
+/ui/dist
+/src-tauri/gen
