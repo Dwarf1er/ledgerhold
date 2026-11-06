@@ -14,10 +14,8 @@ pub enum ReadError {
 fn decode(bytes: &[u8]) -> String {
     let head = String::from_utf8_lossy(&bytes[..bytes.len().min(600)]).to_uppercase();
     let wants_1252 = head.contains("CHARSET:1252") || head.contains("CHARSET=\"WINDOWS-1252\"");
-    if !wants_1252 {
-        if let Ok(s) = std::str::from_utf8(bytes) {
-            return s.strip_prefix('\u{feff}').unwrap_or(s).to_string();
-        }
+    if !wants_1252 && let Ok(s) = std::str::from_utf8(bytes) {
+        return s.strip_prefix('\u{feff}').unwrap_or(s).to_string();
     }
     encoding_rs::WINDOWS_1252.decode(bytes).0.into_owned()
 }
