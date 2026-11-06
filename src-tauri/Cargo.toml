@@ -1,0 +1,21 @@
+[package]
+name = "ledgerhold-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Ledgerhold desktop app"
+
+[lib]
+name = "ledgerhold_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+ledgerhold-app = { path = "../crates/app" }
+ledgerhold-store = { path = "../crates/store" }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+chrono = { workspace = true, features = ["clock"] }
+anyhow = "1"

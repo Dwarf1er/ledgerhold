@@ -1,3 +1,23 @@
 [tools]
 node = "lts"
 rust = "stable"
+
+[tasks.test]
+description = "Run all Rust and UI tests"
+run = ["cargo test", "npm --prefix ui test", "npm --prefix ui run check"]
+
+[tasks.ui]
+description = "Run the UI in a browser against demo data (no Tauri)"
+run = "npm --prefix ui run dev"
+
+[tasks.dev]
+description = "Run the desktop app with hot reload"
+run = "npm run tauri dev"
+
+[tasks.build]
+description = "Build installable desktop bundles"
+run = "npm run tauri build"
+
+[tasks.lint]
+description = "Clippy across the workspace"
+run = "cargo clippy --workspace --all-targets"

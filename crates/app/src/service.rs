@@ -316,6 +316,8 @@ pub fn add_institution(store: &Store, name: &str, bank_id: Option<&str>) -> Resu
     Ok(InstitutionDto { id: store.add_institution(name, bank_id)?, name: name.into(), bank_id: bank_id.map(Into::into) })
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NewAccountInput {
     pub institution_id: String,
     pub name: String,
