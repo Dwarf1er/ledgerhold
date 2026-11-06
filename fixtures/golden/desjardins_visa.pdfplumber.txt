@@ -1,0 +1,14 @@
+Relevé de compte Visa Desjardins
+DATE DU RELEVÉ Jour 21 Mois 01 Année 2026
+Numéro de carte 4540 XXXX XXXX 1234
+Transactions effectuées avec la carte de JOHN DOE
+Date Inscr. Description Montant
+30 12 31 12 RESTAURANT LE GOURMET, QUEBEC QC 62,30
+02 01 03 01 ESSENCE STATION SERVICE MONTREAL QC 45,10
+05 01 06 01 PAIEMENT CAISSE 200,00 CR
+10 01 12 01 REMBOURSEMENT MAGASIN 15,00 CR
+Sous-total des transactions 322,40
+Suite des transactions
+15 01 16 01 ACHAT ORDINATEUR PORTABLE 1 234,56
+20 01 21 01 INTERETS SUR ACHATS 8,75
+Total des achats et débits 1 350,71

@@ -1,0 +1,40 @@
+{
+  "4540XXXXXXXX1234": [
+    {
+      "date": "2025-12-30",
+      "amount_cents": -6230,
+      "memo": "RESTAURANT LE GOURMET, QUEBEC QC",
+      "balance_cents": null
+    },
+    {
+      "date": "2026-01-02",
+      "amount_cents": -4510,
+      "memo": "ESSENCE STATION SERVICE MONTREAL QC",
+      "balance_cents": null
+    },
+    {
+      "date": "2026-01-05",
+      "amount_cents": 20000,
+      "memo": "PAIEMENT CAISSE",
+      "balance_cents": null
+    },
+    {
+      "date": "2026-01-10",
+      "amount_cents": 1500,
+      "memo": "REMBOURSEMENT MAGASIN",
+      "balance_cents": null
+    },
+    {
+      "date": "2026-01-15",
+      "amount_cents": -123456,
+      "memo": "ACHAT ORDINATEUR PORTABLE",
+      "balance_cents": null
+    },
+    {
+      "date": "2026-01-20",
+      "amount_cents": -875,
+      "memo": "INTERETS SUR ACHATS",
+      "balance_cents": null
+    }
+  ]
+}

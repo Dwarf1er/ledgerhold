@@ -1,0 +1,104 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 1471 >>
+stream
+BT /F1 10 Tf
+1 0 0 1 50 780 Tm (Relevé de compte Visa Desjardins) Tj
+1 0 0 1 50 755 Tm (DATE DU RELEVÉ) Tj
+1 0 0 1 170 755 Tm (Jour) Tj
+1 0 0 1 200 755 Tm (21) Tj
+1 0 0 1 240 755 Tm (Mois) Tj
+1 0 0 1 270 755 Tm (01) Tj
+1 0 0 1 310 755 Tm (Année) Tj
+1 0 0 1 350 755 Tm (2026) Tj
+1 0 0 1 50 735 Tm (Numéro de carte) Tj
+1 0 0 1 170 735 Tm (4540 XXXX XXXX 1234) Tj
+1 0 0 1 50 700 Tm (Transactions effectuées avec la carte de) Tj
+1 0 0 1 320 700 Tm (JOHN DOE) Tj
+1 0 0 1 50 685 Tm (Date) Tj
+1 0 0 1 110 685 Tm (Inscr.) Tj
+1 0 0 1 170 685 Tm (Description) Tj
+1 0 0 1 470 685 Tm (Montant) Tj
+1 0 0 1 50 665 Tm (30) Tj
+1 0 0 1 72 665 Tm (12) Tj
+1 0 0 1 110 665 Tm (31) Tj
+1 0 0 1 132 665 Tm (12) Tj
+1 0 0 1 170 665 Tm (RESTAURANT LE GOURMET, QUEBEC QC) Tj
+1 0 0 1 470 665 Tm (62,30) Tj
+1 0 0 1 50 649 Tm (02) Tj
+1 0 0 1 72 649 Tm (01) Tj
+1 0 0 1 110 649 Tm (03) Tj
+1 0 0 1 132 649 Tm (01) Tj
+1 0 0 1 170 649 Tm (ESSENCE STATION SERVICE MONTREAL QC) Tj
+1 0 0 1 470 649 Tm (45,10) Tj
+1 0 0 1 50 633 Tm (05) Tj
+1 0 0 1 72 633 Tm (01) Tj
+1 0 0 1 110 633 Tm (06) Tj
+1 0 0 1 132 633 Tm (01) Tj
+1 0 0 1 170 633 Tm (PAIEMENT CAISSE) Tj
+1 0 0 1 470 633 Tm (200,00) Tj
+1 0 0 1 530 633 Tm (CR) Tj
+1 0 0 1 50 617 Tm (10) Tj
+1 0 0 1 72 617 Tm (01) Tj
+1 0 0 1 110 617 Tm (12) Tj
+1 0 0 1 132 617 Tm (01) Tj
+1 0 0 1 170 617 Tm (REMBOURSEMENT MAGASIN) Tj
+1 0 0 1 470 617 Tm (15,00) Tj
+1 0 0 1 530 617 Tm (CR) Tj
+1 0 0 1 50 591 Tm (Sous-total des transactions) Tj
+1 0 0 1 470 591 Tm (322,40) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 512 >>
+stream
+BT /F1 10 Tf
+1 0 0 1 50 780 Tm (Suite des transactions) Tj
+1 0 0 1 50 760 Tm (15) Tj
+1 0 0 1 72 760 Tm (01) Tj
+1 0 0 1 110 760 Tm (16) Tj
+1 0 0 1 132 760 Tm (01) Tj
+1 0 0 1 170 760 Tm (ACHAT ORDINATEUR PORTABLE) Tj
+1 0 0 1 470 760 Tm (1 234,56) Tj
+1 0 0 1 50 744 Tm (20) Tj
+1 0 0 1 72 744 Tm (01) Tj
+1 0 0 1 110 744 Tm (21) Tj
+1 0 0 1 132 744 Tm (01) Tj
+1 0 0 1 170 744 Tm (INTERETS SUR ACHATS) Tj
+1 0 0 1 470 744 Tm (8,75) Tj
+1 0 0 1 50 718 Tm (Total des achats et débits) Tj
+1 0 0 1 470 718 Tm (1 350,71) Tj
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000218 00000 n 
+0000000344 00000 n 
+0000001867 00000 n 
+0000001993 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+2556
+%%EOF

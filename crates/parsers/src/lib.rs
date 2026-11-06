@@ -3,6 +3,7 @@
 
 mod common;
 pub mod desjardins;
+pub mod desjardins_credit;
 pub mod wealthsimple;
 pub mod wealthsimple_credit;
 
@@ -14,6 +15,8 @@ pub enum ParseError {
     Encoding(String),
     #[error("missing required column {0:?}")]
     MissingColumn(&'static str),
+    #[error("could not read PDF: {0}")]
+    Pdf(String),
     #[error("csv error: {0}")]
     Csv(#[from] csv::Error),
 }
@@ -31,6 +34,7 @@ pub trait StatementParser {
 pub fn all() -> Vec<Box<dyn StatementParser>> {
     vec![
         Box::new(desjardins::Desjardins),
+        Box::new(desjardins_credit::DesjardinsCredit),
         Box::new(wealthsimple::Wealthsimple),
         Box::new(wealthsimple_credit::WealthsimpleCredit::default()),
     ]

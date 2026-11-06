@@ -6,9 +6,11 @@ license.workspace = true
 
 [dependencies]
 ledgerhold-core.workspace = true
-chrono.workspace = true
+chrono = { workspace = true, features = ["clock"] }
 thiserror.workspace = true
 csv = "1"
+regex = "1.13.1"
+pdf-extract = "0.12.1"
 
 [dev-dependencies]
 serde.workspace = true
