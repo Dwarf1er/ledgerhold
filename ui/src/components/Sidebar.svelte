@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { app, setTheme, theme } from '../lib/state.svelte';
+  import { api } from '../lib/api';
+  import { app, markSignedOut, session, setTheme, theme } from '../lib/state.svelte';
   import { links, router } from '../lib/router.svelte';
   import Icon from './Icon.svelte';
   import Segmented from './Segmented.svelte';
@@ -9,6 +10,14 @@
     [...(app.overview?.accounts ?? [])].sort((a, b) => a.account.name.localeCompare(b.account.name)),
   );
   let mode = $state(theme.mode);
+
+  async function signOut() {
+    try {
+      await api.logout();
+    } finally {
+      markSignedOut();
+    }
+  }
 </script>
 
 <aside>
@@ -40,6 +49,9 @@
   {/if}
 
   <div class="foot">
+    {#if session.authRequired}
+      <button type="button" class="signout" onclick={signOut}>Sign out</button>
+    {/if}
     <Segmented
       label="Theme"
       size="sm"
@@ -135,7 +147,23 @@
     white-space: nowrap;
   }
   .foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     margin-top: auto;
     padding: 12px 4px 0;
+  }
+  .signout {
+    border: 0;
+    background: none;
+    padding: 4px 6px;
+    border-radius: var(--radius);
+    color: var(--fg-3);
+    font-size: 13px;
+  }
+  .signout:hover {
+    background: var(--bg-3);
+    color: var(--fg);
   }
 </style>

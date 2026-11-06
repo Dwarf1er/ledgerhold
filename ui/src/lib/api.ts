@@ -146,79 +146,69 @@ export interface Api {
   addAccount(input: NewAccountInput): Promise<string>;
   setOwners(accountId: string, ownerIds: string[]): Promise<void>;
   dbPath(): Promise<string>;
-  /** Native file picker; resolves to a path or null if cancelled. */
+  /** Native file picker; resolves to a path or null if cancelled. In a browser this uploads the file. */
   pickFile(): Promise<string | null>;
   pickFolder(): Promise<string | null>;
+  /** Browser only: upload a dropped file and return the opaque path to import it from. */
+  uploadFile(file: File): Promise<string>;
+  session(): Promise<SessionInfo>;
+  login(password: string): Promise<void>;
+  logout(): Promise<void>;
 }
+
+export interface SessionInfo {
+  authRequired: boolean;
+  authenticated: boolean;
+}
+
+/** Which backend serves this page: the desktop app, the self-hosted server, or in-browser demo data. */
+export type Backend = 'tauri' | 'http' | 'mock';
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
-const tauriApi: Api = {
-  async overview() {
-    return call('overview');
-  },
-  async accountDetail(accountId) {
-    return call('account_detail', { accountId });
-  },
-  async transactions(accountId, from = null, to = null, search = null) {
-    return call('transactions', { accountId, from, to, search });
-  },
-  async balanceSeries(accountId, start, end) {
-    return call('balance_series', { accountId, start, end });
-  },
-  async parsers() {
-    return call('parsers');
-  },
-  async previewImport(accountId, path, parser = null) {
-    return call('preview_import', { accountId, path, parser });
-  },
-  async commitImport(accountId, path, parser = null) {
-    return call('commit_import', { accountId, path, parser });
-  },
-  async undoBatch(batchId) {
-    return call('undo_batch', { batchId });
-  },
-  async setAnchor(accountId, date, amount, note = null) {
-    return call('set_anchor', { accountId, date, amount, note });
-  },
-  async deleteAnchor(anchorId) {
-    return call('delete_anchor', { anchorId });
-  },
-  async exportOfx(accountIds, start, end, dir) {
-    return call('export_ofx', { accountIds, start, end, dir });
-  },
-  async addPerson(name) {
-    return call('add_person', { name });
-  },
-  async addInstitution(name, bankId = null) {
-    return call('add_institution', { name, bankId });
-  },
-  async addAccount(input) {
-    return call('add_account', { input });
-  },
-  async setOwners(accountId, ownerIds) {
-    return call('set_owners', { accountId, ownerIds });
-  },
-  async dbPath() {
-    return call('db_path');
-  },
-  async pickFile() {
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const r = await open({
-      multiple: false,
-      directory: false,
-      filters: [{ name: 'Statements', extensions: ['csv', 'pdf', 'ofx', 'qfx', 'qbo'] }],
-    });
-    return typeof r === 'string' ? r : null;
-  },
-  async pickFolder() {
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const r = await open({ multiple: false, directory: true });
-    return typeof r === 'string' ? r : null;
-  },
-};
+export const backend: Backend = isTauri ? 'tauri' : import.meta.env.DEV ? 'mock' : 'http';
 
-async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+/**
+ * What this backend can do. The desktop app and the demo write exports to a chosen folder;
+ * a browser downloads them instead. (An object, not a constant, so tests can flip it.)
+ */
+export const capabilities = { pickFolder: backend !== 'http' };
+
+export type Call = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+
+/**
+ * Every backend command, written once. The desktop app invokes them over Tauri IPC and the
+ * server over HTTP; contract.test.ts checks these names against both Rust sides.
+ */
+export function backed(call: Call) {
+  return {
+    overview: () => call<Overview>('overview'),
+    accountDetail: (accountId: string) => call<AccountDetail>('account_detail', { accountId }),
+    transactions: (accountId: string, from: string | null = null, to: string | null = null, search: string | null = null) =>
+      call<Txn[]>('transactions', { accountId, from, to, search }),
+    balanceSeries: (accountId: string, start: string, end: string) =>
+      call<BalancePoint[]>('balance_series', { accountId, start, end }),
+    parsers: () => call<Parser[]>('parsers'),
+    previewImport: (accountId: string, path: string, parser: string | null = null) =>
+      call<ImportPreview>('preview_import', { accountId, path, parser }),
+    commitImport: (accountId: string, path: string, parser: string | null = null) =>
+      call<ImportResult>('commit_import', { accountId, path, parser }),
+    undoBatch: (batchId: string) => call<number>('undo_batch', { batchId }),
+    setAnchor: (accountId: string, date: string, amount: number, note: string | null = null) =>
+      call<void>('set_anchor', { accountId, date, amount, note }),
+    deleteAnchor: (anchorId: string) => call<void>('delete_anchor', { anchorId }),
+    addPerson: (name: string) => call<Person>('add_person', { name }),
+    addInstitution: (name: string, bankId: string | null = null) =>
+      call<Institution>('add_institution', { name, bankId }),
+    addAccount: (input: NewAccountInput) => call<string>('add_account', { input }),
+    setOwners: (accountId: string, ownerIds: string[]) => call<void>('set_owners', { accountId, ownerIds }),
+    dbPath: () => call<string>('db_path'),
+    exportToFolder: (accountIds: string[], start: string, end: string, dir: string) =>
+      call<ExportResult[]>('export_ofx', { accountIds, start, end, dir }),
+  };
+}
+
+async function tauriCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke } = await import('@tauri-apps/api/core');
   try {
     return await invoke<T>(cmd, args);
@@ -228,12 +218,45 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   }
 }
 
-let impl: Promise<Api> | null = null;
-function resolve(): Promise<Api> {
-  return (impl ??= isTauri ? Promise.resolve(tauriApi) : import('./mock').then((m) => m.createMockApi()));
+function createTauriApi(): Api {
+  const { exportToFolder, ...commands } = backed(tauriCall);
+  return {
+    ...commands,
+    exportOfx: exportToFolder,
+    async pickFile() {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const r = await open({
+        multiple: false,
+        directory: false,
+        filters: [{ name: 'Statements', extensions: ['csv', 'pdf', 'ofx', 'qfx', 'qbo'] }],
+      });
+      return typeof r === 'string' ? r : null;
+    },
+    async pickFolder() {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const r = await open({ multiple: false, directory: true });
+      return typeof r === 'string' ? r : null;
+    },
+    uploadFile: () => Promise.reject(new Error('uploads are only used by the web version')),
+    session: async () => ({ authRequired: false, authenticated: true }),
+    login: async () => {},
+    logout: async () => {},
+  };
 }
 
-/** Outside Tauri (plain browser, tests) calls go to an in-memory mock. */
+let impl: Promise<Api> | null = null;
+function resolve(): Promise<Api> {
+  if (impl) return impl;
+  impl =
+    backend === 'tauri'
+      ? Promise.resolve(createTauriApi())
+      : backend === 'mock'
+        ? import('./mock').then((m) => m.createMockApi())
+        : import('./http').then((m) => m.createHttpApi());
+  return impl;
+}
+
+/** Outside Tauri, calls go to the server (production build) or to in-memory demo data (dev, tests). */
 export const api: Api = new Proxy({} as Api, {
   get:
     (_t, key: string) =>
@@ -244,4 +267,9 @@ export const api: Api = new Proxy({} as Api, {
 /** Test hook: replace the backend. */
 export function __setApi(a: Api | null) {
   impl = a ? Promise.resolve(a) : null;
+}
+
+/** Download link for an export produced by the server (`<session>/<file>`). */
+export function downloadUrl(path: string): string {
+  return `/api/download/${path.split('/').map(encodeURIComponent).join('/')}`;
 }

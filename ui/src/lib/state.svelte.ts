@@ -9,6 +9,29 @@ export const app = $state<{ overview: Overview | null; loading: boolean; error: 
   person: 'all',
 });
 
+/** Web sign-in state. The desktop app and an open server report `authenticated: true`. */
+export const session = $state({ checked: false, authRequired: false, authenticated: true });
+
+export async function initSession(): Promise<void> {
+  try {
+    const s = await api.session();
+    session.authRequired = s.authRequired;
+    session.authenticated = s.authenticated;
+  } catch (e) {
+    app.error = errMsg(e);
+  } finally {
+    session.checked = true;
+  }
+}
+
+/** The session expired or the user signed out: drop cached data and show the sign-in screen. */
+export function markSignedOut(): void {
+  session.authRequired = true;
+  session.authenticated = false;
+  app.overview = null;
+  app.loading = false;
+}
+
 export function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }

@@ -7,24 +7,35 @@
   import AccountView from './views/AccountView.svelte';
   import ImportView from './views/ImportView.svelte';
   import Settings from './views/Settings.svelte';
-  import { app, applyTheme, refresh } from './lib/state.svelte';
+  import Login from './views/Login.svelte';
+  import { backend } from './lib/api';
+  import { setUnauthorizedHandler } from './lib/unauthorized';
+  import { app, applyTheme, initSession, markSignedOut, refresh, session } from './lib/state.svelte';
   import { router } from './lib/router.svelte';
 
   onMount(() => {
     applyTheme();
-    refresh();
+    if (backend === 'http') setUnauthorizedHandler(markSignedOut);
+    initSession().then(async () => {
+      if (session.authenticated) await refresh();
+      else app.loading = false;
+    });
+    return () => setUnauthorizedHandler(null);
   });
 
   const route = $derived(router.route);
 </script>
 
+{#if session.checked && !session.authenticated}
+  <Login />
+{:else}
 <div class="shell">
   <Sidebar />
   <main>
     <div class="page">
       {#if app.error}
         <Alert tone="error">Could not load your data: {app.error}</Alert>
-      {:else if app.loading}
+      {:else if app.loading || !app.overview}
         <div class="loading muted" role="status">Loading…</div>
       {:else if route.name === 'overview'}
         <Overview />
@@ -40,6 +51,7 @@
     </div>
   </main>
 </div>
+{/if}
 <Toasts />
 
 <style>

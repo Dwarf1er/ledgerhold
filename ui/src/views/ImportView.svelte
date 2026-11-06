@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, isTauri } from '../lib/api';
+  import { api, backend } from '../lib/api';
   import type { ImportPreview, ImportResult, Parser } from '../lib/api';
   import Alert from '../components/Alert.svelte';
   import Badge from '../components/Badge.svelte';
@@ -31,6 +31,7 @@
   let filter = $state<'all' | 'new' | 'duplicate'>('all');
   let limit = $state(300);
   let dragging = $state(false);
+  let uploading = $state(false);
 
   const account = $derived(accounts.find((s) => s.account.id === selected)?.account);
   const fileName = $derived(path ? (path.split(/[\\/]/).pop() ?? path) : null);
@@ -41,7 +42,7 @@
   onMount(() => {
     api.parsers().then((p) => (parsers = p)).catch(() => {});
     let unlisten: (() => void) | undefined;
-    if (isTauri) {
+    if (backend === 'tauri') {
       import('@tauri-apps/api/webview')
         .then(({ getCurrentWebview }) =>
           getCurrentWebview().onDragDropEvent((e) => {
@@ -74,8 +75,31 @@
   }
 
   async function choose() {
-    const p = await api.pickFile();
-    if (p) setFile(p);
+    uploading = backend !== 'tauri';
+    try {
+      const p = await api.pickFile();
+      if (p) setFile(p);
+    } catch (e) {
+      error = errMsg(e);
+    } finally {
+      uploading = false;
+    }
+  }
+
+  // Browsers hand us the file itself (the desktop app gets paths from Tauri's own drop event).
+  async function onDrop(e: DragEvent) {
+    e.preventDefault();
+    dragging = false;
+    const f = e.dataTransfer?.files?.[0];
+    if (!f || backend === 'tauri') return;
+    uploading = true;
+    try {
+      setFile(await api.uploadFile(f));
+    } catch (err) {
+      error = errMsg(err);
+    } finally {
+      uploading = false;
+    }
   }
 
   async function runPreview() {
@@ -180,13 +204,24 @@
       </div>
     </div>
 
-    <button type="button" class="drop" class:dragging onclick={choose}>
+    <button
+      type="button"
+      class="drop"
+      class:dragging
+      disabled={uploading}
+      onclick={choose}
+      ondragover={(e) => { e.preventDefault(); dragging = true; }}
+      ondragleave={() => (dragging = false)}
+      ondrop={onDrop}
+    >
       <Icon name="file" size={20} />
-      {#if fileName}
+      {#if uploading}
+        <span class="muted">Uploading…</span>
+      {:else if fileName}
         <span class="fname mono">{fileName}</span>
         <span class="muted">Click to choose a different file</span>
       {:else}
-        <span><strong>Choose a statement</strong>{#if isTauri} or drop it here{/if}</span>
+        <span><strong>Choose a statement</strong> or drop it here</span>
         <span class="muted">CSV, PDF, OFX, QFX or QBO</span>
       {/if}
     </button>

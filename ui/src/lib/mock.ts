@@ -321,6 +321,10 @@ export function createMockApi(opts: { today?: string } = {}): Api {
     dbPath: async () => '~/.local/share/ledgerhold/ledgerhold.sqlite (demo data)',
     pickFile: async () => '/home/demo/Downloads/releve-janvier.ofx',
     pickFolder: async () => '/home/demo/Documents/budget',
+    uploadFile: async (file) => `/home/demo/Downloads/${file.name}`,
+    session: async () => ({ authRequired: false, authenticated: true }),
+    login: async () => {},
+    logout: async () => {},
   };
 
   return api;

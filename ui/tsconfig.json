@@ -6,7 +6,7 @@
     "moduleResolution": "bundler",
     "strict": true,
     "noUncheckedIndexedAccess": false,
-    "types": ["svelte", "vite/client"],
+    "types": ["svelte", "vite/client", "node"],
     "skipLibCheck": true,
     "verbatimModuleSyntax": true
   },
