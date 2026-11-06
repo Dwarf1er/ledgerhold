@@ -424,7 +424,12 @@ dependencies = [
 name = "ledgerhold-ofx"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "encoding_rs",
  "ledgerhold-core",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
