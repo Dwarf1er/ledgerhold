@@ -12,8 +12,10 @@ pub fn decode_text(bytes: &[u8]) -> Result<String, ParseError> {
                 return Err(ParseError::Encoding("odd-length UTF-16".into()));
             }
             let units: Vec<u16> = rest
-                .chunks_exact(2)
-                .map(|c| if le { u16::from_le_bytes([c[0], c[1]]) } else { u16::from_be_bytes([c[0], c[1]]) })
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| if le { u16::from_le_bytes(*c) } else { u16::from_be_bytes(*c) })
                 .collect();
             return String::from_utf16(&units).map_err(|e| ParseError::Encoding(e.to_string()));
         }
