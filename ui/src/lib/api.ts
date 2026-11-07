@@ -22,6 +22,8 @@ export interface Account {
   currency: string;
   number: string | null;
   ownerIds: string[];
+  /** Balance tracked only by snapshots (e.g. an investment valued monthly): no reconciliation. */
+  balanceOnly: boolean;
 }
 export interface AccountSummary {
   account: Account;
@@ -130,6 +132,7 @@ export interface NewAccountInput {
   currency: string;
   number: string | null;
   ownerIds: string[];
+  balanceOnly?: boolean;
 }
 
 export interface Api {
@@ -157,6 +160,8 @@ export interface Api {
   addAccount(input: NewAccountInput): Promise<string>;
   renameAccount(id: string, name: string): Promise<void>;
   updateAccount(id: string, name: string, number: string | null): Promise<void>;
+  /** Track the balance by snapshots only (no reconciliation), or back to normal. */
+  setBalanceOnly(id: string, balanceOnly: boolean): Promise<void>;
   /** Removes the account with its transactions, imports and balances; resolves to the transactions removed. */
   deleteAccount(id: string): Promise<number>;
   setOwners(accountId: string, ownerIds: string[]): Promise<void>;
@@ -232,6 +237,7 @@ export function backed(call: Call) {
     renameAccount: (id: string, name: string) => call<void>('rename_account', { id, name }),
     updateAccount: (id: string, name: string, number: string | null) =>
       call<void>('update_account', { id, name, number }),
+    setBalanceOnly: (id: string, balanceOnly: boolean) => call<void>('set_balance_only', { id, balanceOnly }),
     deleteAccount: (id: string) => call<number>('delete_account', { id }),
     setOwners: (accountId: string, ownerIds: string[]) => call<void>('set_owners', { accountId, ownerIds }),
     dbPath: () => call<string>('db_path'),

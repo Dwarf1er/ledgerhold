@@ -140,6 +140,12 @@ fn update_account(state: State<'_, AppState>, id: String, name: String, number: 
 }
 
 #[tauri::command(async)]
+fn set_balance_only(state: State<'_, AppState>, id: String, balance_only: bool) -> R<()> {
+    let store = lock(&state)?;
+    svc::set_balance_only(&store, &id, balance_only).map_err(msg)
+}
+
+#[tauri::command(async)]
 fn rename_account(state: State<'_, AppState>, id: String, name: String) -> R<()> {
     let store = lock(&state)?;
     svc::rename_account(&store, &id, &name).map_err(msg)
@@ -218,6 +224,7 @@ pub fn run() {
             delete_person,
             rename_account,
             update_account,
+            set_balance_only,
             delete_account,
             add_institution,
             update_institution,

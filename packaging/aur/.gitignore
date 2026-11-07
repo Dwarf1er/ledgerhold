@@ -1,0 +1,4 @@
+# Only PKGBUILD belongs in git. Everything else here is produced by `makepkg`.
+*
+!.gitignore
+!PKGBUILD

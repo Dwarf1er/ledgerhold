@@ -47,6 +47,7 @@ fn fx() -> Fx {
             currency: "CAD".into(),
             external_account_id: Some("EOP-12345".into()),
             owners: vec![],
+            balance_only: false,
         })
         .unwrap();
     Fx { store, inst, acct }
@@ -73,6 +74,7 @@ fn joint_account_has_several_owners_and_a_person_can_own_several_accounts() {
             currency: "CAD".into(),
             external_account_id: None,
             owners: vec![a.clone()],
+            balance_only: false,
         })
         .unwrap();
     let mut owners = f.store.get_account(&f.acct).unwrap().owners;
@@ -157,6 +159,7 @@ fn deleting_an_account_removes_everything_under_it_and_nothing_else() {
             currency: "CAD".into(),
             external_account_id: None,
             owners: vec![],
+            balance_only: false,
         })
         .unwrap();
     let s = stmt(vec![tx(1, -500, "COFFEE"), tx(2, -900, "LUNCH")]);
@@ -200,6 +203,7 @@ fn external_account_id_is_unique_per_institution_and_findable() {
         currency: "CAD".into(),
         external_account_id: Some("EOP-12345".into()),
         owners: vec![],
+        balance_only: false,
     });
     assert!(dup.is_err());
     assert_eq!(f.store.find_account_by_external(&f.inst, "EOP-12345").unwrap().unwrap().id, f.acct);
@@ -423,11 +427,11 @@ fn file_database_persists_and_migrations_are_idempotent() {
     let id;
     {
         let s = Store::open(&path).unwrap();
-        assert_eq!(s.schema_version().unwrap(), 2);
+        assert_eq!(s.schema_version().unwrap(), 3);
         id = s.add_person("Alex", None).unwrap();
     }
     let s = Store::open(&path).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 2);
+    assert_eq!(s.schema_version().unwrap(), 3);
     assert_eq!(s.list_people().unwrap()[0].id, id);
     drop(s);
     for ext in ["", "-wal", "-shm"] {
@@ -451,7 +455,7 @@ fn upgrading_an_existing_database_gives_each_person_a_distinct_colour() {
         conn.pragma_update(None, "user_version", 1).unwrap();
     }
     let s = Store::open(&path).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 2);
+    assert_eq!(s.schema_version().unwrap(), 3);
     let by_name: Vec<_> = s.list_people().unwrap().into_iter().map(|p| (p.name, p.color)).collect();
     assert_eq!(
         by_name,
@@ -521,5 +525,39 @@ mod file_permissions {
         ledgerhold_store::restrict_dir_to_owner(&root);
         assert_eq!(mode(&root), 0o700);
         let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
+#[test]
+fn upgrading_leaves_existing_accounts_reconciling_as_before() {
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("upgrade-bo-{}.sqlite", std::process::id()));
+    for ext in ["", "-wal", "-shm"] {
+        let _ = fs::remove_file(format!("{}{ext}", path.display()));
+    }
+    {
+        // A database as version 2 left it: no balance_only column.
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(include_str!("../migrations/0001_initial.sql")).unwrap();
+        conn.execute_batch(include_str!("../migrations/0002_person_color.sql")).unwrap();
+        conn.execute("INSERT INTO institution(id, name) VALUES ('i1', 'Desjardins')", []).unwrap();
+        conn.execute(
+            "INSERT INTO account(id, institution_id, name, kind, currency) VALUES ('a1', 'i1', 'Chequing', 'checking', 'CAD')",
+            [],
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+    }
+    let s = Store::open(&path).unwrap();
+    assert_eq!(s.schema_version().unwrap(), 3);
+    let a = s.get_account("a1").unwrap();
+    assert!(!a.balance_only);
+    s.set_balance_only("a1", true).unwrap();
+    assert!(s.get_account("a1").unwrap().balance_only);
+    s.set_balance_only("a1", false).unwrap();
+    assert!(!s.get_account("a1").unwrap().balance_only);
+    assert!(s.set_balance_only("missing", true).is_err());
+    drop(s);
+    for ext in ["", "-wal", "-shm"] {
+        let _ = fs::remove_file(format!("{}{ext}", path.display()));
     }
 }

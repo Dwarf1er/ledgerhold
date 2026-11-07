@@ -133,12 +133,21 @@ pub enum AccountCmd {
         /// Owner (person name or id); repeat for joint accounts
         #[arg(long = "owner")]
         owners: Vec<String>,
+        /// Track the balance by snapshots only (e.g. an investment account valued monthly): no reconciliation
+        #[arg(long)]
+        balance_only: bool,
     },
     List,
     /// Replace the owners of an account
     Owners { account: String, people: Vec<String> },
     /// Change an account's name
     Rename { account: String, name: String },
+    /// Track an account's balance by snapshots only (`true`), or back to normal (`false`)
+    BalanceOnly {
+        account: String,
+        #[arg(action = clap::ArgAction::Set)]
+        on: bool,
+    },
     /// Delete an account and all of its transactions, imports and balances
     Delete {
         account: String,
@@ -310,7 +319,7 @@ pub fn run(cli: &Cli, store: &mut Store, out: &mut impl Write, now: NaiveDateTim
                 writeln!(out, "{}  {}  bank-id={}", i.id, i.name, i.ofx_bank_id.as_deref().unwrap_or("-"))?;
             }
         }
-        Command::Account(AccountCmd::Add { institution, name, kind, currency, number, owners }) => {
+        Command::Account(AccountCmd::Add { institution, name, kind, currency, number, owners, balance_only }) => {
             let owners = owners.iter().map(|o| resolve_person(store, o)).collect::<Result<Vec<_>>>()?;
             let id = store.add_account(&NewAccount {
                 institution_id: resolve_institution(store, institution)?,
@@ -319,6 +328,7 @@ pub fn run(cli: &Cli, store: &mut Store, out: &mut impl Write, now: NaiveDateTim
                 currency: currency.to_uppercase(),
                 external_account_id: number.clone(),
                 owners,
+                balance_only: *balance_only,
             })?;
             writeln!(out, "added account {name} ({id})")?;
         }
@@ -350,6 +360,12 @@ pub fn run(cli: &Cli, store: &mut Store, out: &mut impl Write, now: NaiveDateTim
             }
             store.rename_account(&a.id, name)?;
             writeln!(out, "renamed {} to {name}", a.name)?;
+        }
+        Command::Account(AccountCmd::BalanceOnly { account, on }) => {
+            let a = resolve_account(store, account)?;
+            store.set_balance_only(&a.id, *on)?;
+            let how = if *on { "tracked by snapshots only" } else { "tracked normally" };
+            writeln!(out, "{} is now {how}", a.name)?;
         }
         Command::Account(AccountCmd::Delete { account, yes }) => {
             let a = resolve_account(store, account)?;
@@ -409,6 +425,10 @@ pub fn run(cli: &Cli, store: &mut Store, out: &mut impl Write, now: NaiveDateTim
         }
         Command::Reconcile { account } => {
             let a = resolve_account(store, account)?;
+            if a.balance_only {
+                writeln!(out, "{} is tracked by balance snapshots only; nothing to reconcile", a.name)?;
+                return Ok(());
+            }
             let rows = store.reconcile(&a.id)?;
             if rows.is_empty() {
                 writeln!(out, "need at least two known balances (anchor or statement) to reconcile")?;

@@ -298,7 +298,9 @@
         </div>
 
         <h2 class="sect">Reconciliation</h2>
-        {#if detail.reconciliation.length === 0}
+        {#if detail.summary.account.balanceOnly}
+          <p class="muted">This account is tracked by month-end balance only, so its transactions are not checked against the balances below.</p>
+        {:else if detail.reconciliation.length === 0}
           <p class="muted">Add a second known balance (from a later statement) to check your transactions against it.</p>
         {:else}
           <div class="card">

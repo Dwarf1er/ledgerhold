@@ -60,11 +60,11 @@ export function createMockApi(opts: { today?: string } = {}): Api {
     { id: 'i-ws', name: 'Wealthsimple', bankId: null },
   ];
   const accounts: Account[] = [
-    { id: 'a-joint', name: 'Joint chequing', institutionId: 'i-desj', institutionName: 'Desjardins', kind: 'checking', currency: 'CAD', number: 'EOP-12345', ownerIds: ['p-alex', 'p-sam'] },
-    { id: 'a-save', name: 'Alex savings', institutionId: 'i-desj', institutionName: 'Desjardins', kind: 'savings', currency: 'CAD', number: 'PR1-67890', ownerIds: ['p-alex'] },
-    { id: 'a-ws', name: 'Sam everyday', institutionId: 'i-ws', institutionName: 'Wealthsimple', kind: 'checking', currency: 'CAD', number: null, ownerIds: ['p-sam'] },
-    { id: 'a-visa', name: 'Visa Desjardins', institutionId: 'i-desj', institutionName: 'Desjardins', kind: 'credit_card', currency: 'CAD', number: '4540XXXXXXXX1234', ownerIds: ['p-alex', 'p-sam'] },
-    { id: 'a-usd', name: 'Travel card (USD)', institutionId: 'i-ws', institutionName: 'Wealthsimple', kind: 'credit_card', currency: 'USD', number: null, ownerIds: ['p-sam'] },
+    { id: 'a-joint', name: 'Joint chequing', institutionId: 'i-desj', institutionName: 'Desjardins', kind: 'checking', currency: 'CAD', number: 'EOP-12345', ownerIds: ['p-alex', 'p-sam'], balanceOnly: false },
+    { id: 'a-save', name: 'Alex savings', institutionId: 'i-desj', institutionName: 'Desjardins', kind: 'savings', currency: 'CAD', number: 'PR1-67890', ownerIds: ['p-alex'], balanceOnly: false },
+    { id: 'a-ws', name: 'Sam everyday', institutionId: 'i-ws', institutionName: 'Wealthsimple', kind: 'checking', currency: 'CAD', number: null, ownerIds: ['p-sam'], balanceOnly: false },
+    { id: 'a-visa', name: 'Visa Desjardins', institutionId: 'i-desj', institutionName: 'Desjardins', kind: 'credit_card', currency: 'CAD', number: '4540XXXXXXXX1234', ownerIds: ['p-alex', 'p-sam'], balanceOnly: false },
+    { id: 'a-usd', name: 'Travel card (USD)', institutionId: 'i-ws', institutionName: 'Wealthsimple', kind: 'credit_card', currency: 'USD', number: null, ownerIds: ['p-sam'], balanceOnly: false },
   ];
   const txns = new Map<string, MockTxn[]>(accounts.map((a) => [a.id, []]));
   const anchors = new Map<string, Anchor[]>(accounts.map((a) => [a.id, []]));
@@ -163,7 +163,7 @@ export function createMockApi(opts: { today?: string } = {}): Api {
     accountDetail: async (accountId) => {
       const a = find(accountId);
       const as = [...anchors.get(a.id)!].sort((x, y) => (x.date < y.date ? -1 : 1));
-      const reconciliation = as.slice(1).map((to, i) => {
+      const reconciliation = (a.balanceOnly ? [] : as.slice(1)).map((to, i) => {
         const from = as[i];
         const expected = from.amount + sumBetween(a.id, from.date, to.date);
         return { from: from.date, fromKind: 'anchor' as const, to: to.date, toKind: 'anchor' as const, expected, actual: to.amount, difference: to.amount - expected, ok: to.amount === expected };
@@ -324,6 +324,10 @@ export function createMockApi(opts: { today?: string } = {}): Api {
       a.number = number?.trim() || null;
       return delay(undefined);
     },
+    setBalanceOnly: async (aid, balanceOnly) => {
+      find(aid).balanceOnly = balanceOnly;
+      return delay(undefined);
+    },
     deleteAccount: async (aid) => {
       find(aid);
       const n = txns.get(aid)!.length;
@@ -363,7 +367,7 @@ export function createMockApi(opts: { today?: string } = {}): Api {
       const a: Account = {
         id: id('a'), name: input.name.trim(), institutionId: inst.id, institutionName: inst.name,
         kind: input.kind as AccountKind, currency: input.currency.trim().toUpperCase(),
-        number: input.number?.trim() || null, ownerIds: [...input.ownerIds],
+        number: input.number?.trim() || null, ownerIds: [...input.ownerIds], balanceOnly: !!input.balanceOnly,
       };
       accounts.push(a);
       txns.set(a.id, []);

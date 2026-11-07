@@ -31,9 +31,11 @@ static STATEMENT_DATE_RE: LazyLock<Regex> = LazyLock::new(|| {
 static STATEMENT_DATE_PLAIN_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)DATE DU RELEV[ÉE]\s+(\d{2})\s+(\d{2})\s+(\d{4})\b").unwrap());
 
-/// Masked card number, e.g. "4540 XXXX XXXX 1234".
-static ACCOUNT_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)\b(\d{4}(?:[ -]?X{4}){2}[ -]?\d{4})\b").unwrap());
+/// Masked card number: "4540 XXXX XXXX 1234" (older statements) or "4510 12** **** 7777"
+/// (newer ones, masked with asterisks and showing six leading digits).
+static ACCOUNT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\b(\d{4}[ -]?(?:\d{2}[X*]{2}|[X*]{4})[ -]?[X*]{4}[ -]?\d{4})(?:\b|\s|$)").unwrap()
+});
 
 static TX_LINE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(

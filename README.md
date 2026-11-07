@@ -208,6 +208,14 @@ between them and tells you where they disagree and by how much: *"Your records a
 may be missing, or a credit was recorded twice."* Credit cards work the same way, with money owed shown as a negative
 balance.
 
+#### Accounts you value by hand
+
+Some accounts, such as investments, are better tracked by a month-end value than by importing every trade. Mark the
+account **Track by month-end balance only** (in its edit dialog, or `ledgerhold account balance-only <account> true`)
+and enter a balance now and then. With no transactions between two balances, the change is market movement, not
+missing data, so Ledgerhold does not compare them: the balance chart and the net total still follow your balances, but
+there are no reconciliation warnings.
+
 ### Exporting OFX
 
 Exports use the real bank ID and account type, escape special characters, cover exactly the dates you asked for and
@@ -237,6 +245,7 @@ ledgerhold anchor set Joint 2026-01-01 700.00
 ledgerhold import Joint releve.csv --parser desjardins [--dry-run]
 ledgerhold balance Joint --on 2026-01-31
 ledgerhold reconcile Joint
+ledgerhold account balance-only Tfsa true                      # valued by hand: no reconciliation
 ledgerhold export Joint --month 2026-01 -o ~/budget          # or --from/--to, or --all-months
 ```
 

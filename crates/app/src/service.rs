@@ -18,6 +18,7 @@ fn account_dto(a: &Account, institutions: &HashMap<String, String>) -> AccountDt
         currency: a.currency.clone(),
         number: a.external_account_id.clone(),
         owner_ids: a.owners.clone(),
+        balance_only: a.balance_only,
     }
 }
 
@@ -84,8 +85,9 @@ pub fn account_detail(store: &Store, account_id: &str, today: NaiveDate) -> Resu
                 rows_error: b.rows_error,
             })
             .collect(),
-        reconciliation: store
-            .reconcile(account_id)?
+        // A balance-only account is valued by snapshots with no transactions between them, so
+        // every change would show up as a "discrepancy". There is nothing to reconcile.
+        reconciliation: if a.balance_only { Vec::new() } else { store.reconcile(account_id)? }
             .into_iter()
             .map(|d| DiscrepancyDto {
                 from: d.from,
@@ -348,6 +350,10 @@ pub fn update_account(store: &Store, id: &str, name: &str, number: Option<&str>)
     Ok(store.update_account(id, name, number)?)
 }
 
+pub fn set_balance_only(store: &Store, id: &str, balance_only: bool) -> Result<()> {
+    Ok(store.set_balance_only(id, balance_only)?)
+}
+
 /// Returns how many transactions went with the account.
 pub fn delete_account(store: &Store, id: &str) -> Result<usize> {
     Ok(store.delete_account(id)?)
@@ -385,6 +391,8 @@ pub struct NewAccountInput {
     pub currency: String,
     pub number: Option<String>,
     pub owner_ids: Vec<String>,
+    #[serde(default)]
+    pub balance_only: bool,
 }
 
 pub fn add_account(store: &mut Store, input: NewAccountInput) -> Result<String> {
@@ -404,6 +412,7 @@ pub fn add_account(store: &mut Store, input: NewAccountInput) -> Result<String> 
         currency: input.currency.trim().to_uppercase(),
         external_account_id: input.number.map(|n| n.trim().to_string()).filter(|n| !n.is_empty()),
         owners: input.owner_ids,
+        balance_only: input.balance_only,
     })?)
 }
 

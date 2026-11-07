@@ -165,3 +165,60 @@ fn statement_date_as_plain_dd_mm_yyyy() {
     assert_eq!(st.transactions[0].date.to_string(), "2026-06-05");
     assert_eq!(st.transactions[1].date.to_string(), "2025-12-28");
 }
+
+/// Realistic synthetic statement (see tools/make_synthetic_visa_pdf_realistic.py): rows on both
+/// sides of the header line, plain DD MM YYYY statement date, rewards column, glued CR, a font
+/// with an over-long Widths array, and noise lines that must not parse.
+fn realistic() -> ledgerhold_core::ParsedStatement {
+    let bytes = fs::read(fixtures().join("synthetic/desjardins_visa_realistic.pdf")).unwrap();
+    let mut sts = by_id("desjardins-credit").unwrap().parse(&bytes).unwrap();
+    assert_eq!(sts.len(), 1);
+    sts.remove(0)
+}
+
+#[test]
+fn realistic_statement_yields_every_transaction() {
+    let st = realistic();
+    assert!(st.errors.is_empty(), "{:?}", st.errors); // includes: statement date was found
+    assert_eq!(st.transactions.len(), 22);
+    // Net of everything: purchases negative, the three CR rows positive.
+    let net: i64 = st.transactions.iter().map(|t| t.amount.minor()).sum();
+    assert_eq!(net, -(8412 + 2345 + 6180 + 5230 + 1499 + 1200 + 3725 + 12999 + 1860 + 4815
+        + 975 + 3200 + 7640 + 120450 + 2735 + 5510 + 2107 + 645 + 8890) + 45000 + 1000 + 10000);
+}
+
+#[test]
+fn realistic_statement_details() {
+    let st = realistic();
+    let by_desc = |d: &str| st.transactions.iter().find(|t| t.description == d).unwrap_or_else(|| panic!("no {d:?}"));
+
+    // Row that sits BEFORE the header line in the extracted text.
+    let pharmacy = by_desc("PHARMACIE CENTRALE QUEBEC QC");
+    assert_eq!(pharmacy.date.to_string(), "2026-05-13");
+    assert_eq!(pharmacy.posted_date.unwrap().to_string(), "2026-05-14");
+    assert_eq!(pharmacy.amount.minor(), -2345);
+
+    // Rewards column is not part of the description; the amount is the last number.
+    assert_eq!(by_desc("STATION ESSO #4821 LEVIS QC").amount.minor(), -5230);
+    // Thousands separator.
+    assert_eq!(by_desc("VOYAGES ETE INC QUEBEC QC").amount.minor(), -120450);
+    // Punctuation that appears in real merchant names survives.
+    by_desc("PAYPAL *JEUXVIDEO 4029357733 ON");
+    by_desc("LIBRAIRIE A.B.C. QUEBEC QC");
+    by_desc("RESTO-BAR LE PORT (QC) QUEBEC QC");
+
+    // Payments/refunds are credits, with CR glued to the amount or in its own cell.
+    let paid: Vec<_> = st.transactions.iter().filter(|t| t.description.starts_with("PAIEMENT")).collect();
+    assert_eq!(paid.len(), 2);
+    assert!(paid.iter().all(|t| t.amount.minor() > 0));
+    assert_eq!(by_desc("REMBOURSEMENT QUINCAILLERIE").amount.minor(), 1000);
+
+    // Noise (rate table, subtotals, due date, totals) never becomes a transaction.
+    assert!(st.transactions.iter().all(|t| !t.description.contains("Taux") && !t.description.contains("Total")));
+}
+
+#[test]
+fn realistic_statement_card_number() {
+    // Real statements mask the card with asterisks ("4510 12** **** 7777"), not X's.
+    assert_eq!(realistic().account_hint.as_deref(), Some("451012******7777"));
+}

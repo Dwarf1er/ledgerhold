@@ -19,6 +19,7 @@
   let currency = $state('CAD');
   let number = $state('');
   let owners = $state<string[]>([]);
+  let balanceOnly = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
 
@@ -33,6 +34,7 @@
         currency = 'CAD';
         number = '';
         owners = [];
+        balanceOnly = false;
         error = null;
       });
     }
@@ -58,6 +60,7 @@
         currency: currency.trim().toUpperCase(),
         number: number.trim() || null,
         ownerIds: owners,
+        balanceOnly,
       });
       await refresh();
       toast(`Added ${label}`, 'success');
@@ -121,6 +124,13 @@
           <p class="hint">Choose more than one for a joint account.</p>
         {/if}
       </fieldset>
+      <label class="check">
+        <input type="checkbox" bind:checked={balanceOnly} /> Track by month-end balance only
+      </label>
+      <p class="hint">
+        For accounts you value by hand, such as investments: enter a balance now and then. Ledgerhold will not
+        check transactions against it.
+      </p>
       {#if error}<Alert tone="error">{error}</Alert>{/if}
     </form>
   {/if}

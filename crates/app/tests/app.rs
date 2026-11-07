@@ -33,6 +33,7 @@ fn fx() -> Fx {
             currency: "cad".into(),
             number: Some("EOP-12345".into()),
             owner_ids: vec![alex.id, sam.id],
+            balance_only: false,
         },
     )
     .unwrap();
@@ -205,7 +206,7 @@ fn wrong_currency_account_is_rejected_with_an_explanation() {
     let inst = overview(&f.store, today()).unwrap().institutions[0].id.clone();
     let usd = add_account(
         &mut f.store,
-        NewAccountInput { institution_id: inst, name: "USD".into(), kind: "credit_card".into(), currency: "usd".into(), number: None, owner_ids: vec![] },
+        NewAccountInput { institution_id: inst, name: "USD".into(), kind: "credit_card".into(), currency: "usd".into(), number: None, owner_ids: vec![], balance_only: false },
     )
     .unwrap();
     let ok = preview_import(&f.store, &usd, &fixture("synthetic/wealthsimple_credit.csv"), Some("wealthsimple-credit")).unwrap();
@@ -238,7 +239,7 @@ fn setup_validation_and_owner_changes() {
     let inst = overview(&f.store, today()).unwrap().institutions[0].id.clone();
     let bad = add_account(
         &mut f.store,
-        NewAccountInput { institution_id: inst, name: "x".into(), kind: "brokerage".into(), currency: "CAD".into(), number: None, owner_ids: vec![] },
+        NewAccountInput { institution_id: inst, name: "x".into(), kind: "brokerage".into(), currency: "CAD".into(), number: None, owner_ids: vec![], balance_only: false },
     );
     assert!(bad.is_err());
     let o = overview(&f.store, today()).unwrap();
@@ -293,4 +294,50 @@ fn commit_leaves_out_excluded_rows_and_offers_them_again_later() {
 
     let again = preview_import(&f.store, &f.acct, &path, Some("desjardins")).unwrap();
     assert_eq!(again.new_count, 2);
+}
+
+#[test]
+fn balance_only_account_has_no_reconciliation_but_keeps_its_balance() {
+    let mut f = fx();
+    // Monthly market-value snapshots, no transactions in between: the change is not a data error.
+    set_anchor(&f.store, &f.acct, d(2026, 1, 31), 1_000_000, None).unwrap();
+    set_anchor(&f.store, &f.acct, d(2026, 2, 28), 1_041_237, None).unwrap();
+    let det = account_detail(&f.store, &f.acct, today()).unwrap();
+    assert!(!det.summary.account.balance_only);
+    assert_eq!(det.reconciliation.len(), 1);
+    assert!(!det.reconciliation[0].ok);
+
+    set_balance_only(&f.store, &f.acct, true).unwrap();
+    let march = d(2026, 3, 15);
+    let det = account_detail(&f.store, &f.acct, march).unwrap();
+    assert!(det.summary.account.balance_only);
+    assert!(det.reconciliation.is_empty());
+    // The balance and the net total still come from the latest snapshot.
+    assert_eq!(det.summary.balance, Some(1_041_237));
+    assert_eq!(overview(&f.store, march).unwrap().accounts[0].balance, Some(1_041_237));
+    let v = serde_json::to_value(&det.summary.account).unwrap();
+    assert_eq!(v["balanceOnly"], true);
+
+    set_balance_only(&f.store, &f.acct, false).unwrap();
+    assert_eq!(account_detail(&f.store, &f.acct, today()).unwrap().reconciliation.len(), 1);
+
+    // Can be chosen when the account is created; absent in JSON means off.
+    let inst = overview(&f.store, today()).unwrap().institutions[0].id.clone();
+    let id = add_account(
+        &mut f.store,
+        serde_json::from_value(json!({
+            "institutionId": inst, "name": "TFSA", "kind": "savings", "currency": "CAD",
+            "number": null, "ownerIds": [], "balanceOnly": true
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(account_detail(&f.store, &id, today()).unwrap().summary.account.balance_only);
+    let plain: NewAccountInput = serde_json::from_value(json!({
+        "institutionId": inst, "name": "x", "kind": "savings", "currency": "CAD", "number": null, "ownerIds": []
+    }))
+    .unwrap();
+    assert!(!plain.balance_only);
+
+    assert!(set_balance_only(&f.store, "no-such-account", true).is_err());
 }

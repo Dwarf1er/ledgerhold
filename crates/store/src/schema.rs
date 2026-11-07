@@ -4,8 +4,11 @@
 use crate::Result;
 use rusqlite::Connection;
 
-const MIGRATIONS: &[&str] =
-    &[include_str!("../migrations/0001_initial.sql"), include_str!("../migrations/0002_person_color.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/0001_initial.sql"),
+    include_str!("../migrations/0002_person_color.sql"),
+    include_str!("../migrations/0003_account_balance_only.sql"),
+];
 
 pub fn migrate(conn: &mut Connection) -> Result<()> {
     let current: usize = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;

@@ -32,6 +32,8 @@ pub struct AccountDto {
     pub currency: String,
     pub number: Option<String>,
     pub owner_ids: Vec<String>,
+    /// Balance tracked only by snapshots; the UI shows no reconciliation for it.
+    pub balance_only: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

@@ -167,6 +167,30 @@ fn csv_then_ofx_of_same_account_is_all_duplicates_via_cli() {
 }
 
 #[test]
+fn balance_only_account_is_not_reconciled() {
+    let mut t = household();
+    t.ok("anchor set Joint 2026-01-31 10000.00");
+    t.ok("anchor set Joint 2026-02-28 10412.37");
+    assert!(t.ok("reconcile Joint").contains("MISMATCH"));
+
+    let out = t.ok("account balance-only Joint true");
+    assert!(out.contains("tracked by snapshots only"), "{out}");
+    let out = t.ok("reconcile Joint");
+    assert!(out.contains("nothing to reconcile") && !out.contains("MISMATCH"), "{out}");
+    // Balances still come from the snapshots.
+    assert!(t.ok("balance Joint --on 2026-03-15").contains("10412.37"));
+
+    t.ok("account balance-only Joint false");
+    assert!(t.ok("reconcile Joint").contains("MISMATCH"));
+
+    // And it can be chosen when the account is created.
+    t.ok("account add --institution Desjardins --name TFSA --kind savings --balance-only");
+    t.ok("anchor set TFSA 2026-01-31 1000.00");
+    t.ok("anchor set TFSA 2026-02-28 1100.00");
+    assert!(t.ok("reconcile TFSA").contains("nothing to reconcile"));
+}
+
+#[test]
 fn balance_reconcile_and_undo_flow() {
     let mut t = household();
     // Opening balance is the one printed on the first CSV row's balance minus its amount: 3200.00 - 2500.00 = 700.00

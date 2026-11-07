@@ -34,7 +34,8 @@
 
   // Rename (people and accounts share one dialog) and delete.
   let renameOpen = $state(false);
-  let renameTarget = $state<{ kind: 'person' | 'account'; id: string; current: string; color?: string; number?: string } | null>(null);
+  let renameTarget = $state<{ kind: 'person' | 'account'; id: string; current: string; color?: string; number?: string; balanceOnly?: boolean } | null>(null);
+  let renameBalanceOnly = $state(false);
   let renameNumber = $state('');
   let renameColor = $state('');
   let renameValue = $state('');
@@ -122,8 +123,9 @@
     }
   }
 
-  function startRename(kind: 'person' | 'account', id: string, current: string, color?: string, number?: string | null) {
-    renameTarget = { kind, id, current, color, number: number ?? '' };
+  function startRename(kind: 'person' | 'account', id: string, current: string, color?: string, number?: string | null, balanceOnly = false) {
+    renameTarget = { kind, id, current, color, number: number ?? '', balanceOnly };
+    renameBalanceOnly = balanceOnly;
     renameNumber = number ?? '';
     renameValue = current;
     renameColor = color ?? '';
@@ -135,7 +137,7 @@
     const t = renameTarget;
     const name = renameValue.trim();
     if (!t || !name) return;
-    if (name === t.current && renameColor === (t.color ?? '') && renameNumber.trim() === (t.number ?? '')) {
+    if (name === t.current && renameColor === (t.color ?? '') && renameNumber.trim() === (t.number ?? '') && renameBalanceOnly === !!t.balanceOnly) {
       renameOpen = false;
       return;
     }
@@ -143,7 +145,10 @@
     renameError = null;
     try {
       if (t.kind === 'person') await api.updatePerson(t.id, name, renameColor || null);
-      else await api.updateAccount(t.id, name, renameNumber.trim() || null);
+      else {
+        await api.updateAccount(t.id, name, renameNumber.trim() || null);
+        if (renameBalanceOnly !== !!t.balanceOnly) await api.setBalanceOnly(t.id, renameBalanceOnly);
+      }
       await refresh();
       toast(t.kind === 'person' ? `Saved ${name}` : `Saved ${name}`, 'success');
       renameOpen = false;
@@ -305,7 +310,7 @@
         <span class="push owners">
           {#each ownersOf(s.account.ownerIds) as p (p.id)}<Avatar name={p.name} color={p.color} size={20} />{/each}
           <Button variant="ghost" size="sm" onclick={() => editOwners(s)}>Owners</Button>
-          <Button variant="ghost" size="sm" aria-label={`Edit ${s.account.name}`} onclick={() => startRename('account', s.account.id, s.account.name, undefined, s.account.number)}><Icon name="pencil" size={14} /></Button>
+          <Button variant="ghost" size="sm" aria-label={`Edit ${s.account.name}`} onclick={() => startRename('account', s.account.id, s.account.name, undefined, s.account.number, s.account.balanceOnly)}><Icon name="pencil" size={14} /></Button>
           <Button variant="ghost" size="sm" aria-label={`Delete ${s.account.name}`} onclick={() => { accountToDelete = s; deleteAccountOpen = true; }}><Icon name="trash" size={14} /></Button>
         </span>
       </div>
@@ -374,6 +379,10 @@
         <label for="rename-number">Account or card number <span class="muted">(optional)</span></label>
         <input id="rename-number" class="input mono" placeholder="As printed on statements" bind:value={renameNumber} autocomplete="off" />
       </div>
+      <label class="check">
+        <input type="checkbox" bind:checked={renameBalanceOnly} /> Track by month-end balance only
+      </label>
+      <p class="hint">For accounts you value by hand, such as investments: no checking against transactions.</p>
     {/if}
     {#if renameTarget?.kind === 'person'}
       <div class="field colour">

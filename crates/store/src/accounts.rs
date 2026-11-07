@@ -37,6 +37,8 @@ pub struct NewAccount {
     /// Account/card number as printed by the bank, used to match imports.
     pub external_account_id: Option<String>,
     pub owners: Vec<String>,
+    /// Balance tracked only by snapshots (anchors); see [`Account::balance_only`].
+    pub balance_only: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +51,10 @@ pub struct Account {
     pub external_account_id: Option<String>,
     pub archived: bool,
     pub owners: Vec<String>,
+    /// The balance is tracked by periodic snapshots (anchors) only, e.g. an investment account
+    /// valued once a month. Reconciliation is skipped: between two snapshots with no
+    /// transactions, the change is market movement, not missing data.
+    pub balance_only: bool,
 }
 
 /// "The balance at the END of `as_of` was `amount`."
@@ -167,9 +173,9 @@ impl Store {
         let id = new_id();
         let tx = self.conn.transaction()?;
         tx.execute(
-            "INSERT INTO account(id, institution_id, name, kind, currency, external_account_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, a.institution_id, a.name, a.kind.as_str(), a.currency, a.external_account_id],
+            "INSERT INTO account(id, institution_id, name, kind, currency, external_account_id, balance_only)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, a.institution_id, a.name, a.kind.as_str(), a.currency, a.external_account_id, a.balance_only],
         )?;
         for p in &a.owners {
             tx.execute("INSERT INTO account_owner(account_id, person_id) VALUES (?1, ?2)", params![id, p])?;
@@ -195,6 +201,18 @@ impl Store {
             "UPDATE account SET name = ?2, external_account_id = ?3,
                     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1",
             params![id, name, external_account_id],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(format!("account {id}")));
+        }
+        Ok(())
+    }
+
+    /// Mark an account as tracked by snapshots only (or back to normal).
+    pub fn set_balance_only(&self, id: &str, balance_only: bool) -> Result<()> {
+        let n = self.conn.execute(
+            "UPDATE account SET balance_only = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1",
+            params![id, balance_only],
         )?;
         if n == 0 {
             return Err(StoreError::NotFound(format!("account {id}")));
@@ -245,10 +263,11 @@ impl Store {
             currency: r.get(4)?,
             external_account_id: r.get(5)?,
             archived: r.get::<_, i64>(6)? != 0,
+            balance_only: r.get::<_, i64>(7)? != 0,
         })
     }
 
-    const ACCOUNT_COLS: &'static str = "id, institution_id, name, kind, currency, external_account_id, archived";
+    const ACCOUNT_COLS: &'static str = "id, institution_id, name, kind, currency, external_account_id, archived, balance_only";
 
     pub fn get_account(&self, id: &str) -> Result<Account> {
         let sql = format!("SELECT {} FROM account WHERE id = ?1", Self::ACCOUNT_COLS);

@@ -61,6 +61,7 @@ pub const COMMANDS: &[&str] = &[
     "add_account",
     "rename_account",
     "update_account",
+    "set_balance_only",
     "delete_account",
     "set_owners",
     "db_path",
@@ -163,6 +164,12 @@ struct UpdateInstitution {
     bank_id: Option<String>,
 }
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetBalanceOnly {
+    id: String,
+    balance_only: bool,
+}
+#[derive(Deserialize)]
 struct AddAccount {
     input: NewAccountInput,
 }
@@ -231,6 +238,10 @@ pub fn call(store: &mut Store, command: &str, a: Value, ctx: &RpcContext<'_>) ->
         "update_account" => {
             let a: UpdateAccount = args(a)?;
             out(svc::update_account(store, &a.id, &a.name, a.number.as_deref()))
+        }
+        "set_balance_only" => {
+            let a: SetBalanceOnly = args(a)?;
+            out(svc::set_balance_only(store, &a.id, a.balance_only))
         }
         "delete_account" => {
             let a: PersonId = args(a)?;

@@ -75,6 +75,27 @@ describe('account view', () => {
     expect(main().getByText(/higher than reported/)).toBeTruthy();
   });
 
+  it('shows no reconciliation for an account tracked by month-end balance only', async () => {
+    // Settings: switch the joint account to balance-only through its edit dialog.
+    go('#/settings');
+    render(App);
+    await fireEvent.click(await main().findByRole('button', { name: 'Edit Joint chequing' }));
+    const dlg = within(await screen.findByRole('dialog'));
+    await fireEvent.click(dlg.getByLabelText(/Track by month-end balance only/));
+    await fireEvent.click(dlg.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(app.overview!.accounts.find((a) => a.account.id === 'a-joint')!.account.balanceOnly).toBe(true);
+
+    cleanup();
+    go('#/account/a-joint?tab=balance');
+    render(App);
+    expect(await main().findByText('Reconciliation')).toBeTruthy();
+    expect(await main().findByText(/tracked by month-end balance only/)).toBeTruthy();
+    expect(main().queryByText(/Off by/)).toBeNull();
+    expect(main().queryByText(/than reported/)).toBeNull();
+    expect(main().getByText('Known balances')).toBeTruthy();
+  });
+
   it('edits a known balance in place, including its date', async () => {
     go('#/account/a-usd?tab=balance');
     render(App);
@@ -397,6 +418,18 @@ describe('settings', () => {
     expect(dlg.getByText(/will be removed/)).toBeTruthy();
     await fireEvent.click(dlg.getByRole('button', { name: 'Delete bank' }));
     await waitFor(() => expect(main().queryByRole('button', { name: 'Delete Wealthsimple' })).toBeNull());
+  });
+
+  it('creates an account tracked by month-end balance only', async () => {
+    go('#/settings');
+    render(App);
+    await fireEvent.click(await main().findByRole('button', { name: /Add account/ }));
+    const dlg = within(await screen.findByRole('dialog'));
+    await fireEvent.input(dlg.getByLabelText('Name'), { target: { value: 'TFSA' } });
+    await fireEvent.click(dlg.getByLabelText(/Track by month-end balance only/));
+    await fireEvent.click(dlg.getByRole('button', { name: 'Add account' }));
+    await waitFor(() => expect(toasts.some((t) => t.message === 'Added TFSA')).toBe(true));
+    expect(app.overview!.accounts.find((s) => s.account.name === 'TFSA')!.account.balanceOnly).toBe(true);
   });
 
   it('creates an account with two owners', async () => {

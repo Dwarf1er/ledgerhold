@@ -4,7 +4,7 @@
 # After tagging a release, bump pkgver and run `updpkgsums` to fill in the checksums, then publish with
 # `makepkg --printsrcinfo > .SRCINFO` and push to the AUR.
 pkgname=ledgerhold-bin
-pkgver=0.7.0
+pkgver=0.8.0
 pkgrel=1
 pkgdesc='Household bank ledger: import, dedupe, reconcile and export OFX (desktop app + CLI)'
 arch=('x86_64' 'aarch64')
@@ -23,10 +23,10 @@ source_aarch64=("$_release/Ledgerhold_${pkgver}_arm64.deb"
                 "$_release/ledgerhold-cli-$pkgver-linux-arm64.tar.gz")
 noextract=("Ledgerhold_${pkgver}_amd64.deb" "Ledgerhold_${pkgver}_arm64.deb")
 sha256sums=('708888760e9cb6750ac04a6277eba699ab2c9df3afeb4d74d8dcb2deefd98aaa')
-sha256sums_x86_64=('45f8e77f23beb42c7515de64bb3b6cda72cbe7c6de3dbcff75e7d89466811088'
-                   '3532ef90b9532080ab6d9281fcdf199f849e99426c7a15f0102be988c41236ca')
-sha256sums_aarch64=('d31261545b420de935162d79c88bdb098dc2b7861ece703a0deb97f8d1b3650a'
-                    '3bc8cb34b64346d5bd5edc4b850ec8ad0147bed0759a5f5cb4dc0e0fdb3da117')
+sha256sums_x86_64=('b76b3035688988b7fee94258a194f771d3ac3c4f415a45b46449f8a793ef8825'
+                   '5d42dba81bb35640e9e124dac4bd71b744795161a389857389795d7e52665128')
+sha256sums_aarch64=('b63192263dc78b385723aae79c862d6ab83316d69c37aabc5f9dda75effaee34'
+                    '44d3e263ee85cd6cd09adaaaffdf8fbaddadc67a9916347015abf9bb10e770bf')
 
 package() {
   case "$CARCH" in
