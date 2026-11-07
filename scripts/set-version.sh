@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Stamps a version into Cargo.toml ([workspace.package]) and src-tauri/tauri.conf.json.
+# The installers get only the numeric part (1.2.3 for 1.2.3-rc.1): .rpm rejects "-" and .msi needs a numeric
+# pre-release, so a full pre-release version would fail to bundle. Cargo.toml (and so the CLI) keeps the full one.
 # Usage: scripts/set-version.sh 1.2.3   (or 1.2.3-rc.1)
 set -euo pipefail
 
@@ -22,7 +24,7 @@ fs.writeFileSync("Cargo.toml", cargo.replace(re, `$1${version}$2`));
 
 const confPath = "src-tauri/tauri.conf.json";
 const conf = JSON.parse(fs.readFileSync(confPath, "utf8"));
-conf.version = version;
+conf.version = version.split("-")[0];
 fs.writeFileSync(confPath, JSON.stringify(conf, null, 2) + "\n");
 console.log(`version set to ${version}`);
 JS

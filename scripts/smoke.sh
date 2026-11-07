@@ -60,8 +60,8 @@ for deb in "$out"/*.deb; do
   echo "$contents" | grep -q "usr/bin/ledgerhold-desktop" || fail "$(basename "$deb") lacks the app binary"
   echo "$contents" | grep -q "\.desktop" || fail "$(basename "$deb") lacks a desktop entry"
   echo "$contents" | grep -q "\.png" || fail "$(basename "$deb") lacks an icon"
-  dpkg-deb -I "$deb" | grep -q "Version: $version" || fail "$(basename "$deb") has the wrong version"
-  ok "$(basename "$deb") has the binary, desktop entry, icon and version $version"
+  dpkg-deb -I "$deb" | grep -q "Version: ${version%%-*}" || fail "$(basename "$deb") has the wrong version"
+  ok "$(basename "$deb") has the binary, desktop entry, icon and version ${version%%-*}"
 done
 
 for rpm in "$out"/*.rpm; do

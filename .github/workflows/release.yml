@@ -140,7 +140,14 @@ jobs:
         run: |
           expected=arm64
           [ "${{ matrix.rid }}" = "osx-x64" ] && expected=x86_64
-          app=$(find "target/${{ matrix.target }}/release/bundle" -name '*.app' -maxdepth 3 | head -1)
+          # No loose .app was found under bundle/ after `--bundles dmg`, so inspect the one inside the disk image.
+          dmg=$(find "target/${{ matrix.target }}/release/bundle" -name '*.dmg' | head -1)
+          [ -n "$dmg" ] || { echo "no .dmg found"; exit 1; }
+          mnt=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg" >/dev/null
+          trap 'hdiutil detach "$mnt" >/dev/null || true' EXIT
+          app=$(find "$mnt" -maxdepth 1 -name '*.app' | head -1)
+          [ -n "$app" ] || { echo "no .app inside $dmg"; exit 1; }
           actual=$(lipo -archs "$app/Contents/MacOS/ledgerhold-desktop")
           echo "${{ matrix.rid }}: expected $expected, app is $actual"
           [ "$actual" = "$expected" ]
