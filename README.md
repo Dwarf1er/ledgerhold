@@ -48,6 +48,7 @@ the whole household opens in a browser.
 * [Command line](#command-line)
 * [Self-hosting in detail](#self-hosting-in-detail)
   * [Configuration](#configuration)
+  * [The household password](#the-household-password)
   * [HTTPS and reverse proxies](#https-and-reverse-proxies)
   * [Backups and updates](#backups-and-updates)
   * [Security model](#security-model)
@@ -61,7 +62,6 @@ the whole household opens in a browser.
 
 ## What's included
 
-| | |
 | --- | --- |
 | **Desktop app** | The full interface as a native window (Tauri), with file pickers and folder export. Linux, macOS and Windows. |
 | **`ledgerhold`** | The same features on the command line: import, undo, balances, reconcile, export. A single self-contained file. |
@@ -315,7 +315,7 @@ To update, pull and rebuild: `git pull && docker compose up -d --build`. Databas
 
 ### Security model
 
-The full picture, including what Ledgerhold does *not* protect against, is in [SECURITY.md](SECURITY.md). In short:
+In short:
 
 * One shared password for the household. There are no per-person logins or roles; people are labels on accounts.
 * There is no default password. Until one is chosen, the server serves nothing but the setup screen, which needs a code
