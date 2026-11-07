@@ -142,8 +142,17 @@ export interface Api {
   deleteAnchor(anchorId: string): Promise<void>;
   exportOfx(accountIds: string[], start: string, end: string, dir: string): Promise<ExportResult[]>;
   addPerson(name: string): Promise<Person>;
+  renamePerson(id: string, name: string): Promise<Person>;
+  /** Accounts they owned stay, without them as an owner. */
+  deletePerson(id: string): Promise<void>;
   addInstitution(name: string, bankId?: string | null): Promise<Institution>;
+  updateInstitution(id: string, name: string, bankId?: string | null): Promise<Institution>;
+  /** Refused while the bank still has accounts. */
+  deleteInstitution(id: string): Promise<void>;
   addAccount(input: NewAccountInput): Promise<string>;
+  renameAccount(id: string, name: string): Promise<void>;
+  /** Removes the account with its transactions, imports and balances; resolves to the transactions removed. */
+  deleteAccount(id: string): Promise<number>;
   setOwners(accountId: string, ownerIds: string[]): Promise<void>;
   dbPath(): Promise<string>;
   /** Native file picker; resolves to a path or null if cancelled. In a browser this uploads the file. */
@@ -205,9 +214,16 @@ export function backed(call: Call) {
       call<void>('set_anchor', { accountId, date, amount, note }),
     deleteAnchor: (anchorId: string) => call<void>('delete_anchor', { anchorId }),
     addPerson: (name: string) => call<Person>('add_person', { name }),
+    renamePerson: (id: string, name: string) => call<Person>('rename_person', { id, name }),
+    deletePerson: (id: string) => call<void>('delete_person', { id }),
     addInstitution: (name: string, bankId: string | null = null) =>
       call<Institution>('add_institution', { name, bankId }),
+    updateInstitution: (id: string, name: string, bankId: string | null = null) =>
+      call<Institution>('update_institution', { id, name, bankId }),
+    deleteInstitution: (id: string) => call<void>('delete_institution', { id }),
     addAccount: (input: NewAccountInput) => call<string>('add_account', { input }),
+    renameAccount: (id: string, name: string) => call<void>('rename_account', { id, name }),
+    deleteAccount: (id: string) => call<number>('delete_account', { id }),
     setOwners: (accountId: string, ownerIds: string[]) => call<void>('set_owners', { accountId, ownerIds }),
     dbPath: () => call<string>('db_path'),
     exportToFolder: (accountIds: string[], start: string, end: string, dir: string) =>

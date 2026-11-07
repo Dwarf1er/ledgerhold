@@ -71,6 +71,25 @@ impl Store {
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
+    pub fn rename_person(&self, id: &str, name: &str) -> Result<()> {
+        let n = self.conn.execute(
+            "UPDATE person SET name = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1",
+            params![id, name],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(format!("person {id}")));
+        }
+        Ok(())
+    }
+
+    /// Remove a person. Accounts they co-owned stay, just without them as an owner.
+    pub fn delete_person(&self, id: &str) -> Result<()> {
+        if self.conn.execute("DELETE FROM person WHERE id = ?1", params![id])? == 0 {
+            return Err(StoreError::NotFound(format!("person {id}")));
+        }
+        Ok(())
+    }
+
     pub fn add_institution(&self, name: &str, ofx_bank_id: Option<&str>) -> Result<String> {
         let id = new_id();
         self.conn.execute(
@@ -78,6 +97,35 @@ impl Store {
             params![id, name, ofx_bank_id],
         )?;
         Ok(id)
+    }
+
+    pub fn update_institution(&self, id: &str, name: &str, ofx_bank_id: Option<&str>) -> Result<()> {
+        let n = self.conn.execute(
+            "UPDATE institution SET name = ?2, ofx_bank_id = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+             WHERE id = ?1",
+            params![id, name, ofx_bank_id],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(format!("institution {id}")));
+        }
+        Ok(())
+    }
+
+    /// Remove a bank. Refused while accounts still belong to it, so nothing is lost by accident.
+    pub fn delete_institution(&self, id: &str) -> Result<()> {
+        let accounts: i64 =
+            self.conn.query_row("SELECT COUNT(*) FROM account WHERE institution_id = ?1", params![id], |r| r.get(0))?;
+        if accounts > 0 {
+            return Err(StoreError::InUse(format!(
+                "this bank still has {accounts} account{}; delete {} first",
+                if accounts == 1 { "" } else { "s" },
+                if accounts == 1 { "it" } else { "them" },
+            )));
+        }
+        if self.conn.execute("DELETE FROM institution WHERE id = ?1", params![id])? == 0 {
+            return Err(StoreError::NotFound(format!("institution {id}")));
+        }
+        Ok(())
     }
 
     pub fn list_institutions(&self) -> Result<Vec<Institution>> {
@@ -99,6 +147,28 @@ impl Store {
         }
         tx.commit()?;
         Ok(id)
+    }
+
+    pub fn rename_account(&self, id: &str, name: &str) -> Result<()> {
+        let n = self.conn.execute(
+            "UPDATE account SET name = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1",
+            params![id, name],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(format!("account {id}")));
+        }
+        Ok(())
+    }
+
+    /// Remove an account with everything under it (transactions, imports, balances, owners).
+    /// Returns the number of transactions removed.
+    pub fn delete_account(&self, id: &str) -> Result<usize> {
+        let n: i64 =
+            self.conn.query_row("SELECT COUNT(*) FROM transactions WHERE account_id = ?1", params![id], |r| r.get(0))?;
+        if self.conn.execute("DELETE FROM account WHERE id = ?1", params![id])? == 0 {
+            return Err(StoreError::NotFound(format!("account {id}")));
+        }
+        Ok(n as usize)
     }
 
     /// Replace the owners of an account (a joint account has several).

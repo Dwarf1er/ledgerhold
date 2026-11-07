@@ -52,6 +52,45 @@ fn household() -> T {
 }
 
 #[test]
+fn rename_and_delete_people_and_accounts() {
+    let mut t = household();
+    t.ok("person rename Alex Alexandre");
+    assert!(t.ok("person list").contains("Alexandre"));
+    t.ok("account rename Joint Household");
+    assert!(t.ok("account list").contains("Household"));
+
+    t.ok("person delete Sam");
+    let out = t.ok("account list");
+    assert!(out.contains("Alexandre") && !out.contains("Sam"), "{out}");
+
+    // Deleting an account needs --yes, and says what it would take with it.
+    let (r, _) = t.try_run("account delete Household");
+    assert!(format!("{:#}", r.unwrap_err()).contains("--yes"));
+    assert!(t.ok("account list").contains("Household"));
+    assert!(t.ok("account delete Household --yes").contains("deleted account Household"));
+    assert!(!t.ok("account list").contains("Household"));
+}
+
+#[test]
+fn edit_and_delete_banks() {
+    let mut t = household();
+    t.ok("institution edit Desjardins --name Caisse");
+    assert!(t.ok("institution list").contains("Caisse  bank-id=815"));
+    t.ok("institution edit Caisse --bank-id 900");
+    assert!(t.ok("institution list").contains("Caisse  bank-id=900"));
+    // `ok` splits on whitespace, so an empty value has to be passed as a real argument.
+    let cli = Cli::try_parse_from(["ledgerhold", "institution", "edit", "Caisse", "--bank-id", ""]).unwrap();
+    run(&cli, &mut t.store, &mut Vec::new(), now()).unwrap();
+    assert!(t.ok("institution list").contains("Caisse  bank-id=-"));
+
+    let (r, _) = t.try_run("institution delete Caisse");
+    assert!(format!("{:#}", r.unwrap_err()).contains("still has 1 account"));
+    t.ok("account delete Joint --yes");
+    t.ok("institution delete Caisse");
+    assert!(!t.ok("institution list").contains("Caisse"));
+}
+
+#[test]
 fn household_setup_lists_joint_owners() {
     let mut t = household();
     let out = t.ok("account list");

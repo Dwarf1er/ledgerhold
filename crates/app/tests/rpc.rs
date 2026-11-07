@@ -92,3 +92,48 @@ fn every_advertised_command_is_handled() {
         assert!(!matches!(r, Err(RpcError::UnknownCommand(_))), "{c} is listed but not handled");
     }
 }
+
+#[test]
+fn rename_and_delete_over_json() {
+    let mut s = Store::open_in_memory().unwrap();
+    let alex = ok(&mut s, "add_person", json!({"name": "Alx"}));
+    let r = ok(&mut s, "rename_person", json!({"id": alex["id"], "name": "  Alex "}));
+    assert_eq!(r["name"], "Alex");
+    assert!(run(&mut s, "rename_person", json!({"id": alex["id"], "name": "  "})).is_err());
+    let inst = ok(&mut s, "add_institution", json!({"name": "Desjardins"}));
+    let acct = ok(
+        &mut s,
+        "add_account",
+        json!({"input": {"institutionId": inst["id"], "name": "Joint", "kind": "checking", "currency": "CAD",
+                          "number": null, "ownerIds": [alex["id"]]}}),
+    );
+    ok(&mut s, "rename_account", json!({"id": acct, "name": "Household"}));
+    let ov = ok(&mut s, "overview", json!({}));
+    assert_eq!(ov["accounts"][0]["account"]["name"], "Household");
+
+    ok(&mut s, "delete_person", json!({"id": alex["id"]}));
+    assert_eq!(ok(&mut s, "overview", json!({}))["accounts"][0]["account"]["ownerIds"], json!([]));
+    assert_eq!(ok(&mut s, "delete_account", json!({"id": acct})), 0);
+    assert_eq!(ok(&mut s, "overview", json!({}))["accounts"], json!([]));
+    assert!(run(&mut s, "delete_account", json!({"id": acct})).is_err());
+}
+
+#[test]
+fn edit_and_delete_bank_over_json() {
+    let mut s = Store::open_in_memory().unwrap();
+    let inst = ok(&mut s, "add_institution", json!({"name": "Desjardin", "bankId": "815"}));
+    let e = ok(&mut s, "update_institution", json!({"id": inst["id"], "name": " Desjardins ", "bankId": " "}));
+    assert_eq!((e["name"].as_str(), e["bankId"].is_null()), (Some("Desjardins"), true));
+    assert!(run(&mut s, "update_institution", json!({"id": inst["id"], "name": "", "bankId": null})).is_err());
+    let acct = ok(
+        &mut s,
+        "add_account",
+        json!({"input": {"institutionId": inst["id"], "name": "Joint", "kind": "checking", "currency": "CAD",
+                          "number": null, "ownerIds": []}}),
+    );
+    let err = run(&mut s, "delete_institution", json!({"id": inst["id"]})).unwrap_err();
+    assert!(err.message().contains("still has 1 account"), "{}", err.message());
+    ok(&mut s, "delete_account", json!({"id": acct}));
+    ok(&mut s, "delete_institution", json!({"id": inst["id"]}));
+    assert_eq!(ok(&mut s, "overview", json!({}))["institutions"], json!([]));
+}

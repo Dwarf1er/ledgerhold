@@ -293,11 +293,56 @@ export function createMockApi(opts: { today?: string } = {}): Api {
       people.push(p);
       return delay(p);
     },
+    renamePerson: async (pid, name) => {
+      if (!name.trim()) throw new Error('name is required');
+      const p = people.find((x) => x.id === pid);
+      if (!p) throw new Error(`person ${pid} not found`);
+      p.name = name.trim();
+      return delay({ ...p });
+    },
+    deletePerson: async (pid) => {
+      const i = people.findIndex((x) => x.id === pid);
+      if (i < 0) throw new Error(`person ${pid} not found`);
+      people.splice(i, 1);
+      for (const a of accounts) a.ownerIds = a.ownerIds.filter((o) => o !== pid);
+      return delay(undefined);
+    },
+    renameAccount: async (aid, name) => {
+      if (!name.trim()) throw new Error('name is required');
+      find(aid).name = name.trim();
+      return delay(undefined);
+    },
+    deleteAccount: async (aid) => {
+      find(aid);
+      const n = txns.get(aid)!.length;
+      accounts.splice(accounts.findIndex((x) => x.id === aid), 1);
+      txns.delete(aid);
+      anchors.delete(aid);
+      batches.delete(aid);
+      return delay(n);
+    },
     addInstitution: async (name, bankId = null) => {
       if (!name.trim()) throw new Error('name is required');
       const i = { id: id('i'), name: name.trim(), bankId: bankId?.trim() || null };
       institutions.push(i);
       return delay(i);
+    },
+    updateInstitution: async (iid, name, bankId = null) => {
+      if (!name.trim()) throw new Error('name is required');
+      const inst = institutions.find((i) => i.id === iid);
+      if (!inst) throw new Error(`institution ${iid} not found`);
+      inst.name = name.trim();
+      inst.bankId = bankId?.trim() || null;
+      for (const a of accounts) if (a.institutionId === iid) a.institutionName = inst.name;
+      return delay({ ...inst });
+    },
+    deleteInstitution: async (iid) => {
+      const i = institutions.findIndex((x) => x.id === iid);
+      if (i < 0) throw new Error(`institution ${iid} not found`);
+      const n = accounts.filter((a) => a.institutionId === iid).length;
+      if (n > 0) throw new Error(`this bank still has ${n} account${n === 1 ? '' : 's'}; delete ${n === 1 ? 'it' : 'them'} first`);
+      institutions.splice(i, 1);
+      return delay(undefined);
     },
     addAccount: async (input: NewAccountInput) => {
       const inst = institutions.find((i) => i.id === input.institutionId);

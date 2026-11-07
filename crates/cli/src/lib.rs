@@ -62,6 +62,10 @@ pub enum Command {
 pub enum PersonCmd {
     Add { name: String },
     List,
+    /// Change a person's name
+    Rename { person: String, name: String },
+    /// Remove a person (their accounts stay, without them as an owner)
+    Delete { person: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -73,6 +77,18 @@ pub enum InstitutionCmd {
         bank_id: Option<String>,
     },
     List,
+    /// Change a bank's name and/or OFX bank ID
+    Edit {
+        /// Institution name or id
+        institution: String,
+        #[arg(long)]
+        name: Option<String>,
+        /// New OFX BANKID; pass an empty value (`--bank-id ""`) to clear it
+        #[arg(long)]
+        bank_id: Option<String>,
+    },
+    /// Delete a bank (only once it has no accounts)
+    Delete { institution: String },
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -114,6 +130,15 @@ pub enum AccountCmd {
     List,
     /// Replace the owners of an account
     Owners { account: String, people: Vec<String> },
+    /// Change an account's name
+    Rename { account: String, name: String },
+    /// Delete an account and all of its transactions, imports and balances
+    Delete {
+        account: String,
+        /// Confirm the deletion (without it, nothing is deleted)
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -225,6 +250,20 @@ pub fn run(cli: &Cli, store: &mut Store, out: &mut impl Write, now: NaiveDateTim
             let id = store.add_person(name)?;
             writeln!(out, "added person {name} ({id})")?;
         }
+        Command::Person(PersonCmd::Rename { person, name }) => {
+            let id = resolve_person(store, person)?;
+            let name = name.trim();
+            if name.is_empty() {
+                bail!("name is required");
+            }
+            store.rename_person(&id, name)?;
+            writeln!(out, "renamed {person} to {name}")?;
+        }
+        Command::Person(PersonCmd::Delete { person }) => {
+            let id = resolve_person(store, person)?;
+            store.delete_person(&id)?;
+            writeln!(out, "deleted person {person}")?;
+        }
         Command::Person(PersonCmd::List) => {
             for p in store.list_people()? {
                 writeln!(out, "{}  {}", p.id, p.name)?;
@@ -233,6 +272,25 @@ pub fn run(cli: &Cli, store: &mut Store, out: &mut impl Write, now: NaiveDateTim
         Command::Institution(InstitutionCmd::Add { name, bank_id }) => {
             let id = store.add_institution(name, bank_id.as_deref())?;
             writeln!(out, "added institution {name} ({id})")?;
+        }
+        Command::Institution(InstitutionCmd::Edit { institution, name, bank_id }) => {
+            let id = resolve_institution(store, institution)?;
+            let cur = store.list_institutions()?.into_iter().find(|i| i.id == id).context("institution vanished")?;
+            let name = name.as_deref().map(str::trim).unwrap_or(&cur.name);
+            if name.is_empty() {
+                bail!("name is required");
+            }
+            let bank_id = match bank_id {
+                Some(b) => Some(b.trim()).filter(|b| !b.is_empty()),
+                None => cur.ofx_bank_id.as_deref(),
+            };
+            store.update_institution(&id, name, bank_id)?;
+            writeln!(out, "{name}  bank-id={}", bank_id.unwrap_or("-"))?;
+        }
+        Command::Institution(InstitutionCmd::Delete { institution }) => {
+            let id = resolve_institution(store, institution)?;
+            store.delete_institution(&id)?;
+            writeln!(out, "deleted institution {institution}")?;
         }
         Command::Institution(InstitutionCmd::List) => {
             for i in store.list_institutions()? {
@@ -270,6 +328,24 @@ pub fn run(cli: &Cli, store: &mut Store, out: &mut impl Write, now: NaiveDateTim
                     if owners.is_empty() { "-".into() } else { owners.join(", ") }
                 )?;
             }
+        }
+        Command::Account(AccountCmd::Rename { account, name }) => {
+            let a = resolve_account(store, account)?;
+            let name = name.trim();
+            if name.is_empty() {
+                bail!("name is required");
+            }
+            store.rename_account(&a.id, name)?;
+            writeln!(out, "renamed {} to {name}", a.name)?;
+        }
+        Command::Account(AccountCmd::Delete { account, yes }) => {
+            let a = resolve_account(store, account)?;
+            if !yes {
+                let n = store.list_transactions(&a.id, None, None)?.len();
+                bail!("this would delete {} and its {n} transaction(s); run again with --yes to confirm", a.name);
+            }
+            let n = store.delete_account(&a.id)?;
+            writeln!(out, "deleted account {} and {n} transaction(s)", a.name)?;
         }
         Command::Account(AccountCmd::Owners { account, people }) => {
             let a = resolve_account(store, account)?;

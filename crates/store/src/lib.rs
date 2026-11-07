@@ -79,6 +79,8 @@ pub enum StoreError {
     CurrencyMismatch { account: String, statement: String },
     #[error("kind mismatch: account is {account}, statement looks like {statement}")]
     KindMismatch { account: String, statement: String },
+    #[error("{0}")]
+    InUse(String),
     #[error("account has no balance anchor; set a starting balance first")]
     NoAnchor,
     #[error("invalid data in database: {0}")]

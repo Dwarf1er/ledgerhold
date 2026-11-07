@@ -85,6 +85,75 @@ fn joint_account_has_several_owners_and_a_person_can_own_several_accounts() {
 }
 
 #[test]
+fn people_and_accounts_can_be_renamed() {
+    let f = fx();
+    let a = f.store.add_person("Alx").unwrap();
+    f.store.rename_person(&a, "Alex").unwrap();
+    assert_eq!(f.store.list_people().unwrap()[0].name, "Alex");
+    f.store.rename_account(&f.acct, "Joint").unwrap();
+    assert_eq!(f.store.get_account(&f.acct).unwrap().name, "Joint");
+    assert!(matches!(f.store.rename_person("nope", "x"), Err(StoreError::NotFound(_))));
+    assert!(matches!(f.store.rename_account("nope", "x"), Err(StoreError::NotFound(_))));
+}
+
+#[test]
+fn deleting_a_person_keeps_their_accounts_and_the_other_owner() {
+    let mut f = fx();
+    let a = f.store.add_person("Alex").unwrap();
+    let b = f.store.add_person("Sam").unwrap();
+    f.store.set_owners(&f.acct, &[a.clone(), b.clone()]).unwrap();
+    f.store.delete_person(&a).unwrap();
+    assert_eq!(f.store.get_account(&f.acct).unwrap().owners, vec![b]);
+    assert_eq!(f.store.list_people().unwrap().len(), 1);
+    assert!(matches!(f.store.delete_person(&a), Err(StoreError::NotFound(_))));
+}
+
+#[test]
+fn deleting_an_account_removes_everything_under_it_and_nothing_else() {
+    let mut f = fx();
+    let other = f
+        .store
+        .add_account(&NewAccount {
+            institution_id: f.inst.clone(),
+            name: "Savings".into(),
+            kind: AccountKind::Savings,
+            currency: "CAD".into(),
+            external_account_id: None,
+            owners: vec![],
+        })
+        .unwrap();
+    let s = stmt(vec![tx(1, -500, "COFFEE"), tx(2, -900, "LUNCH")]);
+    f.store.import(&f.acct, meta("a.csv", "h1"), &s).unwrap();
+    f.store.import(&other, meta("b.csv", "h2"), &s).unwrap();
+    f.store.set_anchor(&f.acct, NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(), Money(1000), None).unwrap();
+
+    assert_eq!(f.store.delete_account(&f.acct).unwrap(), 2);
+    assert!(f.store.get_account(&f.acct).is_err());
+    assert_eq!(f.store.list_accounts().unwrap().len(), 1);
+    assert_eq!(f.store.list_transactions(&other, None, None).unwrap().len(), 2);
+    assert!(f.store.list_batches(&f.acct).unwrap().is_empty());
+    assert!(matches!(f.store.delete_account(&f.acct), Err(StoreError::NotFound(_))));
+}
+
+#[test]
+fn a_bank_can_be_edited_and_only_deleted_once_empty() {
+    let f = fx();
+    f.store.update_institution(&f.inst, "Desjardins Caisse", None).unwrap();
+    let i = &f.store.list_institutions().unwrap()[0];
+    assert_eq!((i.name.as_str(), i.ofx_bank_id.as_deref()), ("Desjardins Caisse", None));
+    assert!(matches!(f.store.update_institution("nope", "x", None), Err(StoreError::NotFound(_))));
+
+    let err = f.store.delete_institution(&f.inst).unwrap_err();
+    assert!(matches!(err, StoreError::InUse(_)) && err.to_string().contains("1 account"), "{err}");
+    assert_eq!(f.store.list_institutions().unwrap().len(), 1);
+
+    f.store.delete_account(&f.acct).unwrap();
+    f.store.delete_institution(&f.inst).unwrap();
+    assert!(f.store.list_institutions().unwrap().is_empty());
+    assert!(matches!(f.store.delete_institution(&f.inst), Err(StoreError::NotFound(_))));
+}
+
+#[test]
 fn external_account_id_is_unique_per_institution_and_findable() {
     let mut f = fx();
     let dup = f.store.add_account(&NewAccount {

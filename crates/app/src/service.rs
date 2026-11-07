@@ -307,6 +307,32 @@ pub fn add_person(store: &Store, name: &str) -> Result<PersonDto> {
     Ok(PersonDto { id: store.add_person(name)?, name: name.into() })
 }
 
+pub fn rename_person(store: &Store, id: &str, name: &str) -> Result<PersonDto> {
+    let name = name.trim();
+    if name.is_empty() {
+        bail!("name is required");
+    }
+    store.rename_person(id, name)?;
+    Ok(PersonDto { id: id.into(), name: name.into() })
+}
+
+pub fn delete_person(store: &Store, id: &str) -> Result<()> {
+    Ok(store.delete_person(id)?)
+}
+
+pub fn rename_account(store: &Store, id: &str, name: &str) -> Result<()> {
+    let name = name.trim();
+    if name.is_empty() {
+        bail!("name is required");
+    }
+    Ok(store.rename_account(id, name)?)
+}
+
+/// Returns how many transactions went with the account.
+pub fn delete_account(store: &Store, id: &str) -> Result<usize> {
+    Ok(store.delete_account(id)?)
+}
+
 pub fn add_institution(store: &Store, name: &str, bank_id: Option<&str>) -> Result<InstitutionDto> {
     let name = name.trim();
     if name.is_empty() {
@@ -314,6 +340,20 @@ pub fn add_institution(store: &Store, name: &str, bank_id: Option<&str>) -> Resu
     }
     let bank_id = bank_id.map(str::trim).filter(|b| !b.is_empty());
     Ok(InstitutionDto { id: store.add_institution(name, bank_id)?, name: name.into(), bank_id: bank_id.map(Into::into) })
+}
+
+pub fn update_institution(store: &Store, id: &str, name: &str, bank_id: Option<&str>) -> Result<InstitutionDto> {
+    let name = name.trim();
+    if name.is_empty() {
+        bail!("name is required");
+    }
+    let bank_id = bank_id.map(str::trim).filter(|b| !b.is_empty());
+    store.update_institution(id, name, bank_id)?;
+    Ok(InstitutionDto { id: id.into(), name: name.into(), bank_id: bank_id.map(Into::into) })
+}
+
+pub fn delete_institution(store: &Store, id: &str) -> Result<()> {
+    Ok(store.delete_institution(id)?)
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]

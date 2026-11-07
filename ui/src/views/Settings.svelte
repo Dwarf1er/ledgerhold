@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../lib/api';
-  import type { AccountSummary } from '../lib/api';
+  import type { AccountSummary, Institution, Person } from '../lib/api';
   import AccountDialog from '../components/AccountDialog.svelte';
   import Alert from '../components/Alert.svelte';
   import Avatar from '../components/Avatar.svelte';
   import Button from '../components/Button.svelte';
+  import ConfirmDialog from '../components/ConfirmDialog.svelte';
   import Dialog from '../components/Dialog.svelte';
   import Icon from '../components/Icon.svelte';
   import PageHeader from '../components/PageHeader.svelte';
@@ -25,6 +26,25 @@
   let ownersFor = $state<AccountSummary | null>(null);
   let ownerPick = $state<string[]>([]);
   let dbPath = $state('');
+
+  // Rename (people and accounts share one dialog) and delete.
+  let renameOpen = $state(false);
+  let renameTarget = $state<{ kind: 'person' | 'account'; id: string; current: string } | null>(null);
+  let renameValue = $state('');
+  let renameBusy = $state(false);
+  let renameError = $state<string | null>(null);
+  let bankEditOpen = $state(false);
+  let bankEditing = $state<Institution | null>(null);
+  let bankEditName = $state('');
+  let bankEditId = $state('');
+  let bankEditBusy = $state(false);
+  let bankEditError = $state<string | null>(null);
+  let deleteBankOpen = $state(false);
+  let bankToDelete = $state<Institution | null>(null);
+  let deletePersonOpen = $state(false);
+  let personToDelete = $state<Person | null>(null);
+  let deleteAccountOpen = $state(false);
+  let accountToDelete = $state<AccountSummary | null>(null);
 
   let pwOpen = $state(false);
   let pwCurrent = $state('');
@@ -94,6 +114,89 @@
     }
   }
 
+  function startRename(kind: 'person' | 'account', id: string, current: string) {
+    renameTarget = { kind, id, current };
+    renameValue = current;
+    renameError = null;
+    renameOpen = true;
+  }
+
+  async function saveRename() {
+    const t = renameTarget;
+    const name = renameValue.trim();
+    if (!t || !name) return;
+    if (name === t.current) {
+      renameOpen = false;
+      return;
+    }
+    renameBusy = true;
+    renameError = null;
+    try {
+      if (t.kind === 'person') await api.renamePerson(t.id, name);
+      else await api.renameAccount(t.id, name);
+      await refresh();
+      toast(`Renamed to ${name}`, 'success');
+      renameOpen = false;
+    } catch (err) {
+      renameError = errMsg(err);
+    } finally {
+      renameBusy = false;
+    }
+  }
+
+  function startEditBank(i: Institution) {
+    bankEditing = i;
+    bankEditName = i.name;
+    bankEditId = i.bankId ?? '';
+    bankEditError = null;
+    bankEditOpen = true;
+  }
+
+  async function saveBank() {
+    if (!bankEditing || !bankEditName.trim()) return;
+    bankEditBusy = true;
+    bankEditError = null;
+    try {
+      await api.updateInstitution(bankEditing.id, bankEditName, bankEditId || null);
+      await refresh();
+      toast(`Saved ${bankEditName.trim()}`, 'success');
+      bankEditOpen = false;
+    } catch (err) {
+      bankEditError = errMsg(err);
+    } finally {
+      bankEditBusy = false;
+    }
+  }
+
+  async function doDeleteBank() {
+    if (!bankToDelete) return;
+    const { id, name } = bankToDelete;
+    await api.deleteInstitution(id);
+    await refresh();
+    toast(`Deleted ${name}`, 'success');
+  }
+
+  const accountsAt = (id: string) => ov.accounts.filter((s) => s.account.institutionId === id).length;
+
+  async function doDeletePerson() {
+    if (!personToDelete) return;
+    const { id, name } = personToDelete;
+    await api.deletePerson(id);
+    if (app.person === id) app.person = 'all';
+    await refresh();
+    toast(`Removed ${name}`, 'success');
+  }
+
+  async function doDeleteAccount() {
+    if (!accountToDelete) return;
+    const { name } = accountToDelete.account;
+    await api.deleteAccount(accountToDelete.account.id);
+    await refresh();
+    toast(`Deleted ${name}`, 'success');
+  }
+
+  const ownedBy = (id: string) => ov.accounts.filter((s) => s.account.ownerIds.includes(id)).length;
+
   function editOwners(s: AccountSummary) {
     ownersFor = s;
     ownerPick = [...s.account.ownerIds];
@@ -128,7 +231,13 @@
   </div>
   <div class="card">
     {#each ov.people as p (p.id)}
-      <div class="line"><Avatar name={p.name} size={24} /> <span>{p.name}</span></div>
+      <div class="line">
+        <Avatar name={p.name} size={24} /> <span>{p.name}</span>
+        <span class="push actions">
+          <Button variant="ghost" size="sm" aria-label={`Rename ${p.name}`} onclick={() => startRename('person', p.id, p.name)}>Rename</Button>
+          <Button variant="ghost" size="sm" aria-label={`Remove ${p.name}`} onclick={() => { personToDelete = p; deletePersonOpen = true; }}>Remove</Button>
+        </span>
+      </div>
     {:else}
       <div class="line muted">No one yet.</div>
     {/each}
@@ -152,6 +261,10 @@
         <span class="ico"><Icon name="bank" size={14} /></span>
         <span>{i.name}</span>
         {#if i.bankId}<span class="muted mono push">ID {i.bankId}</span>{/if}
+        <span class="actions" class:push={!i.bankId}>
+          <Button variant="ghost" size="sm" aria-label={`Edit ${i.name}`} onclick={() => startEditBank(i)}>Edit</Button>
+          <Button variant="ghost" size="sm" aria-label={`Delete ${i.name}`} onclick={() => { bankToDelete = i; deleteBankOpen = true; }}>Delete</Button>
+        </span>
       </div>
     {:else}
       <div class="line muted">No banks yet.</div>
@@ -181,6 +294,8 @@
         <span class="push owners">
           {#each ownersOf(s.account.ownerIds) as p (p.id)}<Avatar name={p.name} size={20} />{/each}
           <Button variant="ghost" size="sm" onclick={() => editOwners(s)}>Owners</Button>
+          <Button variant="ghost" size="sm" aria-label={`Rename ${s.account.name}`} onclick={() => startRename('account', s.account.id, s.account.name)}>Rename</Button>
+          <Button variant="ghost" size="sm" aria-label={`Delete ${s.account.name}`} onclick={() => { accountToDelete = s; deleteAccountOpen = true; }}>Delete</Button>
         </span>
       </div>
     {:else}
@@ -236,6 +351,67 @@
     <Button variant="primary" onclick={saveOwners}>Save</Button>
   {/snippet}
 </Dialog>
+
+<Dialog bind:open={renameOpen} title={renameTarget?.kind === 'account' ? 'Rename account' : 'Rename person'} description={renameTarget?.current} width={400}>
+  <form onsubmit={(e) => { e.preventDefault(); saveRename(); }}>
+    <div class="field">
+      <label for="rename-name">Name</label>
+      <input id="rename-name" class="input" bind:value={renameValue} autocomplete="off" data-autofocus />
+    </div>
+    {#if renameError}<div class="gap"></div><Alert tone="error">{renameError}</Alert>{/if}
+    <button type="submit" hidden aria-hidden="true" tabindex="-1"></button>
+  </form>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (renameOpen = false)}>Cancel</Button>
+    <Button variant="primary" loading={renameBusy} disabled={!renameValue.trim()} onclick={saveRename}>Save</Button>
+  {/snippet}
+</Dialog>
+
+<Dialog bind:open={bankEditOpen} title="Edit bank" description={bankEditing?.name} width={400}>
+  <form class="pwform" onsubmit={(e) => { e.preventDefault(); saveBank(); }}>
+    <div class="field">
+      <label for="bank-name">Bank name</label>
+      <input id="bank-name" class="input" bind:value={bankEditName} autocomplete="off" data-autofocus />
+    </div>
+    <div class="field">
+      <label for="bank-ofx-id">OFX bank ID (optional)</label>
+      <input id="bank-ofx-id" class="input mono" bind:value={bankEditId} autocomplete="off" />
+    </div>
+    {#if bankEditError}<Alert tone="error">{bankEditError}</Alert>{/if}
+    <button type="submit" hidden aria-hidden="true" tabindex="-1"></button>
+  </form>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (bankEditOpen = false)}>Cancel</Button>
+    <Button variant="primary" loading={bankEditBusy} disabled={!bankEditName.trim()} onclick={saveBank}>Save</Button>
+  {/snippet}
+</Dialog>
+
+<ConfirmDialog bind:open={deleteBankOpen} title="Delete this bank?" confirmLabel="Delete bank" danger onconfirm={doDeleteBank}>
+  {#if bankToDelete}
+    {#if accountsAt(bankToDelete.id)}
+      <strong>{bankToDelete.name}</strong> still has {accountsAt(bankToDelete.id)} account{accountsAt(bankToDelete.id) === 1 ? '' : 's'}.
+      Delete {accountsAt(bankToDelete.id) === 1 ? 'it' : 'them'} first and then the bank can be removed.
+    {:else}
+      <strong>{bankToDelete.name}</strong> will be removed.
+    {/if}
+  {/if}
+</ConfirmDialog>
+
+<ConfirmDialog bind:open={deletePersonOpen} title="Remove this person?" confirmLabel="Remove" danger onconfirm={doDeletePerson}>
+  {#if personToDelete}
+    <strong>{personToDelete.name}</strong> will be removed from the household.
+    {#if ownedBy(personToDelete.id)}
+      Their {ownedBy(personToDelete.id)} account{ownedBy(personToDelete.id) === 1 ? '' : 's'} will stay, without them as an owner.
+    {/if}
+  {/if}
+</ConfirmDialog>
+
+<ConfirmDialog bind:open={deleteAccountOpen} title="Delete this account?" confirmLabel="Delete account" danger onconfirm={doDeleteAccount}>
+  {#if accountToDelete}
+    This permanently deletes <strong>{accountToDelete.account.name}</strong> with its
+    {accountToDelete.txnCount} transaction{accountToDelete.txnCount === 1 ? '' : 's'}, imports and known balances. This can't be undone.
+  {/if}
+</ConfirmDialog>
 
 <Dialog bind:open={pwOpen} title="Change password" description="Everyone else will be signed out." width={400}>
   <form class="pwform" onsubmit={(e) => { e.preventDefault(); savePassword(); }}>
@@ -307,7 +483,8 @@
   .acct .muted {
     font-size: 13px;
   }
-  .owners {
+  .owners,
+  .actions {
     display: flex;
     align-items: center;
     gap: 4px;

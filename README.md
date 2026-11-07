@@ -240,7 +240,8 @@ ledgerhold reconcile Joint
 ledgerhold export Joint --month 2026-01 -o ~/budget          # or --from/--to, or --all-months
 ```
 
-Also: `transactions`, `batches`, `undo`, `account list`, `parsers`. Formats are detected for OFX/QFX/QBO files; for CSV
+Fix mistakes with `person rename|delete`, `account rename|delete` (`account delete` removes the account's transactions
+too, so it needs `--yes`) and `institution edit|delete` (a bank can only be deleted once it has no accounts). Also: `transactions`, `batches`, `undo`, `account list`, `parsers`. Formats are detected for OFX/QFX/QBO files; for CSV
 and PDF pass `--parser`. `--db FILE` (or `LEDGERHOLD_DB`) picks another database.
 
 ## Self-hosting in detail

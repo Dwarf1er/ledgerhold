@@ -53,8 +53,14 @@ pub const COMMANDS: &[&str] = &[
     "set_anchor",
     "delete_anchor",
     "add_person",
+    "rename_person",
+    "delete_person",
     "add_institution",
+    "update_institution",
+    "delete_institution",
     "add_account",
+    "rename_account",
+    "delete_account",
     "set_owners",
     "db_path",
 ];
@@ -118,8 +124,24 @@ struct Name {
     name: String,
 }
 #[derive(Deserialize)]
+struct PersonId {
+    id: String,
+}
+#[derive(Deserialize)]
+struct Rename {
+    id: String,
+    name: String,
+}
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Institution {
+    name: String,
+    bank_id: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateInstitution {
+    id: String,
     name: String,
     bank_id: Option<String>,
 }
@@ -177,9 +199,33 @@ pub fn call(store: &mut Store, command: &str, a: Value, ctx: &RpcContext<'_>) ->
             let a: Name = args(a)?;
             out(svc::add_person(store, &a.name))
         }
+        "rename_person" => {
+            let a: Rename = args(a)?;
+            out(svc::rename_person(store, &a.id, &a.name))
+        }
+        "delete_person" => {
+            let a: PersonId = args(a)?;
+            out(svc::delete_person(store, &a.id))
+        }
+        "rename_account" => {
+            let a: Rename = args(a)?;
+            out(svc::rename_account(store, &a.id, &a.name))
+        }
+        "delete_account" => {
+            let a: PersonId = args(a)?;
+            out(svc::delete_account(store, &a.id))
+        }
         "add_institution" => {
             let a: Institution = args(a)?;
             out(svc::add_institution(store, &a.name, a.bank_id.as_deref()))
+        }
+        "update_institution" => {
+            let a: UpdateInstitution = args(a)?;
+            out(svc::update_institution(store, &a.id, &a.name, a.bank_id.as_deref()))
+        }
+        "delete_institution" => {
+            let a: PersonId = args(a)?;
+            out(svc::delete_institution(store, &a.id))
         }
         "add_account" => {
             let a: AddAccount = args(a)?;

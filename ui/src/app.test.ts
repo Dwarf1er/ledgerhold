@@ -197,6 +197,99 @@ describe('settings', () => {
     expect(await main().findByText('Jordan')).toBeTruthy();
   });
 
+  it('renames a person and an account', async () => {
+    go('#/settings');
+    render(App);
+    await fireEvent.click(await main().findByRole('button', { name: 'Rename Sam' }));
+    const dlg = within(await screen.findByRole('dialog'));
+    await fireEvent.input(dlg.getByLabelText('Name'), { target: { value: 'Samantha' } });
+    await fireEvent.click(dlg.getByRole('button', { name: 'Save' }));
+    expect(await main().findByText('Samantha')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    await fireEvent.click(main().getByRole('button', { name: 'Rename Joint chequing' }));
+    const dlg2 = within(await screen.findByRole('dialog'));
+    await fireEvent.input(dlg2.getByLabelText('Name'), { target: { value: 'Household' } });
+    await fireEvent.click(dlg2.getByRole('button', { name: 'Save' }));
+    expect(await main().findByText('Household')).toBeTruthy();
+    expect(main().queryByText('Joint chequing')).toBeNull();
+  });
+
+  it('removes a person but keeps their accounts, and resets the household filter', async () => {
+    go('#/settings');
+    app.person = 'p-sam';
+    render(App);
+    await fireEvent.click(await main().findByRole('button', { name: 'Remove Sam' }));
+    const dlg = within(await screen.findByRole('dialog'));
+    expect(dlg.getByText(/will stay, without them as an owner/)).toBeTruthy();
+    await fireEvent.click(dlg.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(main().queryByRole('button', { name: 'Remove Sam' })).toBeNull());
+    expect(main().getByText('Sam everyday')).toBeTruthy();
+    expect(app.person).toBe('all');
+    expect(app.overview!.accounts.every((s) => !s.account.ownerIds.includes('p-sam'))).toBe(true);
+  });
+
+  it('asks before deleting an account, then removes it', async () => {
+    go('#/settings');
+    render(App);
+    await fireEvent.click(await main().findByRole('button', { name: 'Delete Alex savings' }));
+    const dlg = within(await screen.findByRole('dialog'));
+    expect(dlg.getByText(/can't be undone/)).toBeTruthy();
+    // Cancelling changes nothing.
+    await fireEvent.click(dlg.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(main().getByText('Alex savings')).toBeTruthy();
+
+    await fireEvent.click(main().getByRole('button', { name: 'Delete Alex savings' }));
+    const dlg2 = within(await screen.findByRole('dialog'));
+    await fireEvent.click(dlg2.getByRole('button', { name: 'Delete account' }));
+    await waitFor(() => expect(main().queryByText('Alex savings')).toBeNull());
+    expect(main().getByText('Joint chequing')).toBeTruthy();
+  });
+
+  it('edits a bank, and refuses to delete one that still has accounts', async () => {
+    go('#/settings');
+    render(App);
+    await fireEvent.click(await main().findByRole('button', { name: 'Edit Wealthsimple' }));
+    const dlg = within(await screen.findByRole('dialog'));
+    await fireEvent.input(dlg.getByLabelText('Bank name'), { target: { value: 'Wealthsimple Cash' } });
+    await fireEvent.input(dlg.getByLabelText('OFX bank ID (optional)'), { target: { value: '777' } });
+    await fireEvent.click(dlg.getByRole('button', { name: 'Save' }));
+    expect(await main().findByText('Wealthsimple Cash')).toBeTruthy();
+    expect(main().getByText('ID 777')).toBeTruthy();
+    // Accounts at the bank show the new name.
+    expect(app.overview!.accounts.find((s) => s.account.id === 'a-ws')!.account.institutionName).toBe('Wealthsimple Cash');
+
+    await fireEvent.click(main().getByRole('button', { name: 'Delete Wealthsimple Cash' }));
+    const confirm = within(await screen.findByRole('dialog'));
+    expect(confirm.getByText(/still has 2 accounts/)).toBeTruthy();
+    await fireEvent.click(confirm.getByRole('button', { name: 'Delete bank' }));
+    expect(await confirm.findByText(/still has 2 accounts; delete them first/)).toBeTruthy();
+    expect(app.overview!.institutions.some((i) => i.name === 'Wealthsimple Cash')).toBe(true);
+  });
+
+  it('deletes a bank that has no accounts', async () => {
+    go('#/settings');
+    render(App);
+    await fireEvent.click(await main().findByRole('button', { name: 'Delete Alex savings' }));
+    await fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete account' }));
+    await waitFor(() => expect(main().queryByText('Alex savings')).toBeNull());
+    await fireEvent.click(await main().findByRole('button', { name: 'Delete Wealthsimple' }));
+    // Wealthsimple still has two accounts; remove them first, as the dialog says.
+    await fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    for (const name of ['Sam everyday', 'Travel card (USD)']) {
+      await fireEvent.click(main().getByRole('button', { name: `Delete ${name}` }));
+      await fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete account' }));
+      await waitFor(() => expect(main().queryByText(name)).toBeNull());
+    }
+    await fireEvent.click(main().getByRole('button', { name: 'Delete Wealthsimple' }));
+    const dlg = within(await screen.findByRole('dialog'));
+    expect(dlg.getByText(/will be removed/)).toBeTruthy();
+    await fireEvent.click(dlg.getByRole('button', { name: 'Delete bank' }));
+    await waitFor(() => expect(main().queryByRole('button', { name: 'Delete Wealthsimple' })).toBeNull());
+  });
+
   it('creates an account with two owners', async () => {
     go('#/settings');
     render(App);

@@ -116,9 +116,45 @@ fn add_person(state: State<'_, AppState>, name: String) -> R<PersonDto> {
 }
 
 #[tauri::command(async)]
+fn rename_person(state: State<'_, AppState>, id: String, name: String) -> R<PersonDto> {
+    let store = lock(&state)?;
+    svc::rename_person(&store, &id, &name).map_err(msg)
+}
+
+#[tauri::command(async)]
+fn delete_person(state: State<'_, AppState>, id: String) -> R<()> {
+    let store = lock(&state)?;
+    svc::delete_person(&store, &id).map_err(msg)
+}
+
+#[tauri::command(async)]
+fn rename_account(state: State<'_, AppState>, id: String, name: String) -> R<()> {
+    let store = lock(&state)?;
+    svc::rename_account(&store, &id, &name).map_err(msg)
+}
+
+#[tauri::command(async)]
+fn delete_account(state: State<'_, AppState>, id: String) -> R<usize> {
+    let store = lock(&state)?;
+    svc::delete_account(&store, &id).map_err(msg)
+}
+
+#[tauri::command(async)]
 fn add_institution(state: State<'_, AppState>, name: String, bank_id: Option<String>) -> R<InstitutionDto> {
     let store = lock(&state)?;
     svc::add_institution(&store, &name, bank_id.as_deref()).map_err(msg)
+}
+
+#[tauri::command(async)]
+fn update_institution(state: State<'_, AppState>, id: String, name: String, bank_id: Option<String>) -> R<InstitutionDto> {
+    let store = lock(&state)?;
+    svc::update_institution(&store, &id, &name, bank_id.as_deref()).map_err(msg)
+}
+
+#[tauri::command(async)]
+fn delete_institution(state: State<'_, AppState>, id: String) -> R<()> {
+    let store = lock(&state)?;
+    svc::delete_institution(&store, &id).map_err(msg)
 }
 
 #[tauri::command(async)]
@@ -166,7 +202,13 @@ pub fn run() {
             delete_anchor,
             export_ofx,
             add_person,
+            rename_person,
+            delete_person,
+            rename_account,
+            delete_account,
             add_institution,
+            update_institution,
+            delete_institution,
             add_account,
             set_owners,
             db_path,
