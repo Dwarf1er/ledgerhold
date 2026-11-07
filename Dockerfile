@@ -2,7 +2,8 @@
 #
 # Self-hosted Ledgerhold: the web UI plus the server, in one small image.
 #   docker build -t ledgerhold .
-#   docker run -p 3000:3000 -e LEDGERHOLD_PASSWORD=change-me -v ledgerhold-data:/data ledgerhold
+#   docker run -p 3000:3000 -v ledgerhold-data:/data ledgerhold
+#   docker logs <container>     # the one-time setup code; enter it in the browser to choose a password
 # See docker-compose.yml for the usual way to run it.
 
 # ---- 1. Build the web UI --------------------------------------------------------------

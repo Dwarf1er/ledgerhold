@@ -1,5 +1,5 @@
 use anyhow::Result;
-use ledgerhold_server::{AppState, Config, router, spawn_sweeper};
+use ledgerhold_server::{AppState, Config, reset_password, router, spawn_sweeper};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
@@ -7,13 +7,19 @@ use std::time::Duration;
 const HELP: &str = "ledgerhold-server: self-hosted Ledgerhold
 
 Configuration is read from environment variables:
-  LEDGERHOLD_PASSWORD         shared household password (required unless bound to 127.0.0.1)
+  LEDGERHOLD_PASSWORD         optional: set the household password here instead of in the web UI
   LEDGERHOLD_LISTEN           address to listen on            [127.0.0.1:3000]
   LEDGERHOLD_DB               SQLite database file            [data/ledgerhold.sqlite]
   LEDGERHOLD_STATIC           built web UI directory          [ui/dist]
   LEDGERHOLD_SECRET           session signing key (default: generated and stored beside the database)
   LEDGERHOLD_ALLOWED_ORIGINS  extra comma-separated origins allowed to call the API
-  LEDGERHOLD_ALLOW_NO_AUTH    set to 1 to listen on a network with no password
+  LEDGERHOLD_ALLOW_NO_AUTH    set to 1 to serve with no password at all (something else must protect it)
+
+First run: with no password configured on a network address the server prints a one-time setup
+code in its log; open the web UI and enter it to choose the household password.
+
+Commands:
+  reset-password  forget the stored password; the next start offers first-run setup again
 
 Options:
   --healthcheck   probe a running server and exit 0 if it is healthy
@@ -70,6 +76,17 @@ async fn main() -> Result<()> {
                 e
             });
         }
+        Some("reset-password") => {
+            let cfg = Config::from_env()?;
+            if cfg.password.is_some() {
+                println!("The password comes from LEDGERHOLD_PASSWORD, so there is nothing stored to reset. Change that variable instead.");
+            } else if reset_password(&cfg)? {
+                println!("Password forgotten. Restart the server, then open it in a browser to set a new one.");
+            } else {
+                println!("No password was stored in {}.", cfg.data_dir().display());
+            }
+            return Ok(());
+        }
         Some(other) => anyhow::bail!("unknown argument {other:?}; try --help"),
         None => {}
     }
@@ -86,8 +103,15 @@ async fn main() -> Result<()> {
         env!("CARGO_PKG_VERSION"),
         cfg.listen,
         cfg.db_path.display(),
-        if cfg.password.is_some() { "required" } else { "none" }
+        state.auth_summary()
     );
+    if let Some(code) = state.setup_code() {
+        println!();
+        println!("  First run: open Ledgerhold in your browser and choose a household password.");
+        println!("  Setup code: {code}");
+        println!("  (It changes on every restart and stops working once the password is set.)");
+        println!();
+    }
     axum::serve(listener, router(state)).with_graceful_shutdown(shutdown_signal()).await?;
     Ok(())
 }

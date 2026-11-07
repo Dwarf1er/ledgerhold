@@ -4,7 +4,7 @@
 pub mod auth;
 pub mod files;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use auth::Auth;
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Path, Query, Request, State};
@@ -57,19 +57,27 @@ impl Config {
         })
     }
 
-    /// Refuse to expose financial data on a network without a password.
     pub fn validate(&self) -> Result<()> {
-        if self.password.is_none() && !self.listen.ip().is_loopback() && !self.allow_no_auth {
-            bail!(
-                "refusing to listen on {} without a password. Set LEDGERHOLD_PASSWORD, bind to 127.0.0.1, \
-                 or set LEDGERHOLD_ALLOW_NO_AUTH=1 if something in front of Ledgerhold handles authentication",
-                self.listen
-            );
-        }
-        if self.password.as_deref().is_some_and(|p| p.chars().count() < 8) {
-            bail!("LEDGERHOLD_PASSWORD must be at least 8 characters");
+        if let Some(p) = &self.password {
+            auth::validate_password(p).map_err(|m| anyhow::anyhow!("LEDGERHOLD_PASSWORD: {m}"))?;
         }
         Ok(())
+    }
+
+    /// The directory holding the database, the session key and the password hash.
+    pub fn data_dir(&self) -> PathBuf {
+        self.db_path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(FsPath::new(".")).to_path_buf()
+    }
+}
+
+/// Forget the stored password so the next start offers first-run setup again.
+/// Returns whether there was one to forget.
+pub fn reset_password(cfg: &Config) -> Result<bool> {
+    let path = auth::hash_path(&cfg.data_dir());
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e).with_context(|| format!("removing {}", path.display())),
     }
 }
 
@@ -84,7 +92,7 @@ pub struct AppState {
 impl AppState {
     pub fn open(cfg: &Config) -> Result<Arc<AppState>> {
         cfg.validate()?;
-        let data_dir = cfg.db_path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(FsPath::new(".")).to_path_buf();
+        let data_dir = cfg.data_dir();
         std::fs::create_dir_all(&data_dir).with_context(|| format!("creating {}", data_dir.display()))?;
         let store = Store::open(&cfg.db_path).map_err(|e| anyhow::anyhow!("opening {}: {e}", cfg.db_path.display()))?;
         let key = match &cfg.secret {
@@ -93,16 +101,47 @@ impl AppState {
         };
         Ok(Arc::new(AppState {
             store: Mutex::new(store),
-            auth: Auth::new(cfg.password.as_deref(), key),
+            auth: choose_auth(cfg, &data_dir, key)?,
             files: Files::new(&data_dir)?,
             static_dir: cfg.static_dir.clone(),
             allowed_origins: cfg.allowed_origins.clone(),
         }))
     }
 
+    /// The one-time first-run code, while the server is waiting for its password to be chosen.
+    pub fn setup_code(&self) -> Option<String> {
+        self.auth.setup_code()
+    }
+
+    pub fn auth_summary(&self) -> &'static str {
+        match self.auth.mode() {
+            auth::Mode::Open => "none",
+            auth::Mode::Setup => "not set yet (first-run setup)",
+            auth::Mode::Password => "required",
+        }
+    }
+
     /// Delete stale temporary uploads/exports; call periodically.
     pub fn sweep(&self) {
         self.files.sweep(Duration::from_secs(3600));
+    }
+}
+
+/// Decide how the server is protected:
+/// an environment password wins, then explicit "no auth", then a stored password; with none of those
+/// a loopback server is open (it's your own machine) and a networked one starts first-run setup.
+fn choose_auth(cfg: &Config, data_dir: &FsPath, key: Vec<u8>) -> Result<Auth> {
+    let hash_file = auth::hash_path(data_dir);
+    if let Some(password) = &cfg.password {
+        return Auth::with_env_password(password, key);
+    }
+    if cfg.allow_no_auth {
+        return Ok(Auth::open(key));
+    }
+    match auth::load_hash(&hash_file)? {
+        Some(phc) => Auth::with_stored_hash(phc, key, hash_file),
+        None if cfg.listen.ip().is_loopback() => Ok(Auth::open(key)),
+        None => Ok(Auth::setup(key, hash_file)),
     }
 }
 
@@ -131,6 +170,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     let protected = Router::new()
         .route("/api/rpc/{command}", post(rpc_handler))
         .route("/api/upload", post(upload).layer(DefaultBodyLimit::max(MAX_UPLOAD)))
+        .route("/api/password", post(change_password))
         .route("/api/export", post(export))
         .route("/api/download/{session}/{name}", get(download))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
@@ -138,6 +178,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/api/session", get(session))
+        .route("/api/setup", post(setup))
         .route("/api/login", post(login))
         .route("/api/logout", post(logout))
         .merge(protected)
@@ -207,7 +248,12 @@ async fn require_auth(State(state): State<Arc<AppState>>, req: Request, next: Ne
 // ---- auth endpoints -----------------------------------------------------------------
 
 async fn session(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Json<Value> {
-    Json(json!({ "authRequired": state.auth.required(), "authenticated": authenticated(&state, &headers) }))
+    Json(json!({
+        "authRequired": state.auth.required(),
+        "authenticated": authenticated(&state, &headers),
+        "setupRequired": state.auth.setup_required(),
+        "canChangePassword": state.auth.can_change_password(),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -215,16 +261,7 @@ struct LoginBody {
     password: String,
 }
 
-async fn login(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<LoginBody>) -> Response {
-    if state.auth.throttled() {
-        return error(StatusCode::TOO_MANY_REQUESTS, "too many attempts; wait a minute and try again");
-    }
-    if !state.auth.check_password(&body.password) {
-        state.auth.record_failure();
-        // Slow down guessing without blocking other requests.
-        tokio::time::sleep(Duration::from_millis(600)).await;
-        return error(StatusCode::UNAUTHORIZED, "wrong password");
-    }
+fn session_cookie(state: &AppState, headers: &HeaderMap) -> Response {
     let secure = headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).is_some_and(|v| v.eq_ignore_ascii_case("https"));
     let cookie = format!(
         "{}={}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}{}",
@@ -234,6 +271,100 @@ async fn login(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(body
         if secure { "; Secure" } else { "" }
     );
     (StatusCode::NO_CONTENT, [(header::SET_COOKIE, cookie)]).into_response()
+}
+
+/// Argon2 takes tens of milliseconds of CPU: keep it off the async threads.
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    tokio::task::spawn_blocking(f).await.ok()
+}
+
+async fn wrong(state: &AppState, message: &str) -> Response {
+    state.auth.record_failure();
+    // Slow down guessing without blocking other requests.
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    error(StatusCode::UNAUTHORIZED, message)
+}
+
+const THROTTLED: &str = "too many attempts; wait a minute and try again";
+
+async fn login(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<LoginBody>) -> Response {
+    if state.auth.setup_required() {
+        return error(StatusCode::CONFLICT, "this server has no password yet; finish setup first");
+    }
+    if state.auth.throttled() {
+        return error(StatusCode::TOO_MANY_REQUESTS, THROTTLED);
+    }
+    let s = state.clone();
+    if !blocking(move || s.auth.check_password(&body.password)).await.unwrap_or(false) {
+        return wrong(&state, "wrong password").await;
+    }
+    session_cookie(&state, &headers)
+}
+
+#[derive(Deserialize)]
+struct SetupBody {
+    code: String,
+    password: String,
+}
+
+/// First-run only: whoever holds the one-time code from the server log chooses the household password.
+async fn setup(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<SetupBody>) -> Response {
+    if !state.auth.setup_required() {
+        return error(StatusCode::CONFLICT, "setup is already complete");
+    }
+    if state.auth.throttled() {
+        return error(StatusCode::TOO_MANY_REQUESTS, THROTTLED);
+    }
+    if !state.auth.check_setup_code(&body.code) {
+        return wrong(&state, "that setup code is not right; look for \"Setup code\" in the server log").await;
+    }
+    if let Err(m) = auth::validate_password(&body.password) {
+        return error(StatusCode::BAD_REQUEST, m);
+    }
+    let password = body.password;
+    let Some(Ok(phc)) = blocking(move || auth::hash_password(&password)).await else {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, "could not hash the password");
+    };
+    match state.auth.complete_setup(&body.code, phc) {
+        Ok(()) => session_cookie(&state, &headers),
+        Err(auth::SetupError::BadCode) => wrong(&state, "that setup code is not right").await,
+        Err(auth::SetupError::AlreadyDone) => {
+            error(StatusCode::CONFLICT, "setup could not be completed (already done, or the password could not be saved; see the server log)")
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChangePasswordBody {
+    current: String,
+    new_password: String,
+}
+
+async fn change_password(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<ChangePasswordBody>) -> Response {
+    if !state.auth.can_change_password() {
+        return error(StatusCode::CONFLICT, "the password is set with LEDGERHOLD_PASSWORD; change it there");
+    }
+    if state.auth.throttled() {
+        return error(StatusCode::TOO_MANY_REQUESTS, THROTTLED);
+    }
+    let s = state.clone();
+    let current = body.current;
+    if !blocking(move || s.auth.check_password(&current)).await.unwrap_or(false) {
+        return wrong(&state, "the current password is not right").await;
+    }
+    if let Err(m) = auth::validate_password(&body.new_password) {
+        return error(StatusCode::BAD_REQUEST, m);
+    }
+    let new_password = body.new_password;
+    let Some(Ok(phc)) = blocking(move || auth::hash_password(&new_password)).await else {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, "could not hash the password");
+    };
+    if let Err(e) = state.auth.change_password(phc) {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}"));
+    }
+    // Every other session just became invalid; keep this one signed in.
+    session_cookie(&state, &headers)
 }
 
 async fn logout() -> Response {

@@ -154,11 +154,18 @@ export interface Api {
   session(): Promise<SessionInfo>;
   login(password: string): Promise<void>;
   logout(): Promise<void>;
+  /** First run of a self-hosted server: choose the household password with the code from the server log. */
+  setup(code: string, password: string): Promise<void>;
+  changePassword(current: string, newPassword: string): Promise<void>;
 }
 
 export interface SessionInfo {
   authRequired: boolean;
   authenticated: boolean;
+  /** The server has no password yet and is waiting for first-run setup. */
+  setupRequired: boolean;
+  /** The password is stored by the app (not set through the environment), so it can be changed here. */
+  canChangePassword: boolean;
 }
 
 /** Which backend serves this page: the desktop app, the self-hosted server, or in-browser demo data. */
@@ -238,9 +245,11 @@ function createTauriApi(): Api {
       return typeof r === 'string' ? r : null;
     },
     uploadFile: () => Promise.reject(new Error('uploads are only used by the web version')),
-    session: async () => ({ authRequired: false, authenticated: true }),
+    session: async () => ({ authRequired: false, authenticated: true, setupRequired: false, canChangePassword: false }),
     login: async () => {},
     logout: async () => {},
+    setup: async () => {},
+    changePassword: async () => {},
   };
 }
 

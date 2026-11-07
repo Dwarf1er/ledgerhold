@@ -70,9 +70,24 @@ describe('http backend', () => {
   it('session() reads /api/session without raising the expiry handler', async () => {
     const handler = vi.fn();
     setUnauthorizedHandler(handler);
-    const { api, calls } = server(() => ok({ authRequired: true, authenticated: false }));
-    expect(await api.session()).toEqual({ authRequired: true, authenticated: false });
+    const { api, calls } = server(() => ok({ authRequired: true, authenticated: false, setupRequired: false, canChangePassword: true }));
+    expect(await api.session()).toEqual({ authRequired: true, authenticated: false, setupRequired: false, canChangePassword: true });
     expect(calls[0].url).toBe('/api/session');
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('setup and password changes post to their endpoints, and a 401 there is a wrong code, not an expired session', async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+    const first = server(() => fail(401, 'that setup code is not right'));
+    await expect(first.api.setup('AAAA', 'my household pass')).rejects.toThrow('that setup code is not right');
+    expect(first.calls[0].url).toBe('/api/setup');
+    expect(JSON.parse(first.calls[0].init.body as string)).toEqual({ code: 'AAAA', password: 'my household pass' });
+
+    const second = server(() => fail(401, 'the current password is not right'));
+    await expect(second.api.changePassword('old', 'a brand new pass')).rejects.toThrow('the current password is not right');
+    expect(second.calls[0].url).toBe('/api/password');
+    expect(JSON.parse(second.calls[0].init.body as string)).toEqual({ current: 'old', newPassword: 'a brand new pass' });
     expect(handler).not.toHaveBeenCalled();
   });
 

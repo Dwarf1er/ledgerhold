@@ -29,7 +29,7 @@ describe('web server contract', () => {
   });
 
   it('every non-command endpoint the browser client uses exists on the server', () => {
-    for (const route of ['/api/login', '/api/logout', '/api/session', '/api/upload', '/api/export']) {
+    for (const route of ['/api/login', '/api/logout', '/api/session', '/api/setup', '/api/password', '/api/upload', '/api/export']) {
       expect(httpSrc, `client uses ${route}`).toContain(route);
       expect(serverSrc, `server routes ${route}`).toContain(`"${route}"`);
     }

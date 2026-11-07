@@ -10,13 +10,21 @@ export const app = $state<{ overview: Overview | null; loading: boolean; error: 
 });
 
 /** Web sign-in state. The desktop app and an open server report `authenticated: true`. */
-export const session = $state({ checked: false, authRequired: false, authenticated: true });
+export const session = $state({
+  checked: false,
+  authRequired: false,
+  authenticated: true,
+  setupRequired: false,
+  canChangePassword: false,
+});
 
 export async function initSession(): Promise<void> {
   try {
     const s = await api.session();
     session.authRequired = s.authRequired;
     session.authenticated = s.authenticated;
+    session.setupRequired = s.setupRequired;
+    session.canChangePassword = s.canChangePassword;
   } catch (e) {
     app.error = errMsg(e);
   } finally {

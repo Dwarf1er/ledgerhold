@@ -7,6 +7,7 @@
   import AccountView from './views/AccountView.svelte';
   import ImportView from './views/ImportView.svelte';
   import Settings from './views/Settings.svelte';
+  import Setup from './views/Setup.svelte';
   import Login from './views/Login.svelte';
   import { backend } from './lib/api';
   import { setUnauthorizedHandler } from './lib/unauthorized';
@@ -26,7 +27,9 @@
   const route = $derived(router.route);
 </script>
 
-{#if session.checked && !session.authenticated}
+{#if session.checked && session.setupRequired}
+  <Setup />
+{:else if session.checked && !session.authenticated}
   <Login />
 {:else}
 <div class="shell">

@@ -65,7 +65,7 @@ the whole household opens in a browser.
 | --- | --- |
 | **Desktop app** | The full interface as a native window (Tauri), with file pickers and folder export. Linux, macOS and Windows. |
 | **`ledgerhold`** | The same features on the command line: import, undo, balances, reconcile, export. A single self-contained file. |
-| **`ledgerhold-server`** | The same interface in a browser, protected by one shared household password. Ships as a 54 MB Docker image (amd64 and arm64). |
+| **`ledgerhold-server`** | The same interface in a browser, protected by one shared household password you choose on first run. Ships as a 54 MB Docker image (amd64 and arm64). |
 
 All three read and write the same kind of SQLite file, and the desktop app and the CLI share one by default.
 
@@ -127,21 +127,23 @@ binary. Unpack it somewhere on your `PATH`.
 ```bash
 git clone https://github.com/Dwarf1er/ledgerhold.git
 cd ledgerhold
-cp .env.example .env        # set LEDGERHOLD_PASSWORD (8+ characters) and your TZ
 docker compose up -d
+docker compose logs ledgerhold     # prints a one-time setup code
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and sign in with that password. The first build compiles the server
-and takes a few minutes. Each release also publishes a multi-arch image:
+Open [http://localhost:3000](http://localhost:3000), enter the setup code, and choose the household password. That's
+the whole setup: there's no `.env` file to write and no password sitting in your configuration. The first build compiles
+the server and takes a few minutes. Each release also publishes a multi-arch image:
 
 ```bash
-docker run -d --name ledgerhold -p 3000:3000 \
-  -e LEDGERHOLD_PASSWORD='choose-a-long-password' -e TZ=America/Toronto \
+docker run -d --name ledgerhold -p 3000:3000 -e TZ=America/Toronto \
   -v ledgerhold-data:/data ghcr.io/dwarf1er/ledgerhold:latest
+docker logs ledgerhold             # the setup code
 ```
 
-The container refuses to start on a network without a password. See [Self-hosting in detail](#self-hosting-in-detail)
-for HTTPS, backups and the full list of settings.
+Until a password is chosen the server shows nothing but the setup screen, and only someone who can read its log can
+finish it. See [Self-hosting in detail](#self-hosting-in-detail) for HTTPS, backups, a forgotten password and the full
+list of settings.
 
 ### From source
 
@@ -248,16 +250,36 @@ Set these as environment variables (in `.env` for Docker Compose):
 
 | Variable | Description |
 | --- | --- |
-| `LEDGERHOLD_PASSWORD` | **Required** unless the server listens on `127.0.0.1` only. The household's shared password, 8 or more characters. |
+| `LEDGERHOLD_PASSWORD` | Optional. Sets the household password from the environment (8 or more characters) instead of the browser setup. The web UI then can't change it. |
 | `TZ` | Your timezone, e.g. `America/Toronto`, so "today" and month boundaries are right. Defaults to `UTC`. |
 | `LEDGERHOLD_PORT` | Host port for Docker Compose. Defaults to `3000`. |
 | `LEDGERHOLD_ALLOWED_ORIGINS` | Extra comma-separated origins allowed to use the API, for a proxy that rewrites the `Host` header, e.g. `https://ledger.example.com`. |
 | `LEDGERHOLD_SECRET` | Key used to sign sign-ins. Generated and kept beside the database by default. |
-| `LEDGERHOLD_ALLOW_NO_AUTH` | Set to `1` to listen on a network without a password, only if something in front handles authentication. |
+| `LEDGERHOLD_ALLOW_NO_AUTH` | Set to `1` to serve with no password at all, only if something in front handles authentication. |
 | `LEDGERHOLD_LISTEN`, `LEDGERHOLD_DB`, `LEDGERHOLD_STATIC` | Address, database file and web UI folder. The image sets sensible values. |
 
 Without Docker, build `ledgerhold-server` (`cargo build --release -p ledgerhold-server`), build the UI (`npm --prefix ui
 ci && npm --prefix ui run build`) and run it with `LEDGERHOLD_STATIC=ui/dist`. `ledgerhold-server --help` lists the settings.
+
+### The household password
+
+The first time the server starts on a network address with no password configured, it enters **setup mode**: it prints a
+random one-time code in its log (`docker compose logs ledgerhold`) and shows only a setup screen. Enter the code and
+choose a password (8 or more characters) and you're signed in. The code stops working as soon as it's used and changes
+on every restart.
+
+The password is stored as a salted argon2 hash in the data volume (`password.hash`), never in plain text. Change it
+under **Settings → Security**; changing it signs everyone else out.
+
+**Forgot it?** Forget the stored password, restart, and go through setup again. Your data isn't touched:
+
+```bash
+docker compose exec ledgerhold ledgerhold-server reset-password
+docker compose restart ledgerhold
+docker compose logs ledgerhold     # the new setup code
+```
+
+Setting `LEDGERHOLD_PASSWORD` skips setup and takes precedence. Running on `127.0.0.1` only (no Docker) needs no password.
 
 ### HTTPS and reverse proxies
 
@@ -275,8 +297,9 @@ With nginx, add `proxy_set_header Host $host;`, `proxy_set_header X-Forwarded-Pr
 
 ### Backups and updates
 
-Everything is one SQLite file in the `ledgerhold-data` volume. To back it up, stop the container, copy the volume's
-files (`ledgerhold.sqlite`, plus `ledgerhold.sqlite-wal` and `-shm` if present), and start it again:
+Everything is in the `ledgerhold-data` volume: the SQLite database, plus `password.hash` and `session.key`. To back it
+up, stop the container, copy the volume's files, and start it again (a backup contains your password hash, so keep it
+private):
 
 ```bash
 docker compose stop
@@ -289,6 +312,9 @@ To update, pull and rebuild: `git pull && docker compose up -d --build`. Databas
 ### Security model
 
 * One shared password for the household. There are no per-person logins or roles; people are labels on accounts.
+* There is no default password. Until one is chosen, the server serves nothing but the setup screen, which needs a code
+  that only appears in the server log. The password is kept as a salted argon2 hash, and setup attempts are throttled
+  like logins.
 * Sign-ins are signed, `HttpOnly`, `SameSite=Strict` cookies that last 30 days. Failed logins are slowed down and
   limited to ten a minute.
 * Writes from other websites are refused, and responses carry a strict Content-Security-Policy.

@@ -11,7 +11,7 @@
   import PageHeader from '../components/PageHeader.svelte';
   import { kindLabel, maskNumber } from '../lib/format';
   import { links } from '../lib/router.svelte';
-  import { app, errMsg, refresh, toast } from '../lib/state.svelte';
+  import { app, errMsg, refresh, session, toast } from '../lib/state.svelte';
 
   const ov = $derived(app.overview!);
 
@@ -25,6 +25,35 @@
   let ownersFor = $state<AccountSummary | null>(null);
   let ownerPick = $state<string[]>([]);
   let dbPath = $state('');
+
+  let pwOpen = $state(false);
+  let pwCurrent = $state('');
+  let pwNew = $state('');
+  let pwConfirm = $state('');
+  let pwBusy = $state(false);
+  let pwError = $state<string | null>(null);
+  const pwReady = $derived(pwCurrent !== '' && pwNew.length >= 8 && pwNew === pwConfirm);
+
+  function openPassword() {
+    pwCurrent = pwNew = pwConfirm = '';
+    pwError = null;
+    pwOpen = true;
+  }
+
+  async function savePassword() {
+    if (!pwReady) return;
+    pwBusy = true;
+    pwError = null;
+    try {
+      await api.changePassword(pwCurrent, pwNew);
+      pwOpen = false;
+      toast('Password changed. Anyone else signed in will need the new one.', 'success');
+    } catch (err) {
+      pwError = errMsg(err);
+    } finally {
+      pwBusy = false;
+    }
+  }
 
   onMount(() => {
     api.dbPath().then((p) => (dbPath = p)).catch(() => {});
@@ -170,6 +199,23 @@
   <div class="card"><div class="line"><span class="mono small">{dbPath || '…'}</span></div></div>
 </section>
 
+{#if session.canChangePassword}
+  <section>
+    <div class="head">
+      <div>
+        <h2>Security</h2>
+        <p class="muted">One password is shared by everyone in the household.</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="line">
+        <span>Household password</span>
+        <span class="push"><Button size="sm" onclick={openPassword}>Change password</Button></span>
+      </div>
+    </div>
+  </section>
+{/if}
+
 <AccountDialog bind:open={accountOpen} institutions={ov.institutions} people={ov.people} />
 
 <Dialog bind:open={ownersOpen} title="Account owners" description={ownersFor?.account.name} width={400}>
@@ -191,7 +237,36 @@
   {/snippet}
 </Dialog>
 
+<Dialog bind:open={pwOpen} title="Change password" description="Everyone else will be signed out." width={400}>
+  <form class="pwform" onsubmit={(e) => { e.preventDefault(); savePassword(); }}>
+    <div class="field">
+      <label for="pw-current">Current password</label>
+      <input id="pw-current" class="input" type="password" autocomplete="current-password" bind:value={pwCurrent} data-autofocus />
+    </div>
+    <div class="field">
+      <label for="pw-new">New password</label>
+      <input id="pw-new" class="input" type="password" autocomplete="new-password" bind:value={pwNew} />
+    </div>
+    <div class="field">
+      <label for="pw-confirm">Confirm new password</label>
+      <input id="pw-confirm" class="input" type="password" autocomplete="new-password" bind:value={pwConfirm} />
+    </div>
+    {#if pwNew && pwNew.length < 8}<p class="muted small">Use at least 8 characters.</p>
+    {:else if pwConfirm && pwConfirm !== pwNew}<p class="muted small">The two passwords do not match.</p>{/if}
+    {#if pwError}<Alert tone="error">{pwError}</Alert>{/if}
+    <button type="submit" hidden aria-hidden="true" tabindex="-1"></button>
+  </form>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (pwOpen = false)}>Cancel</Button>
+    <Button variant="primary" loading={pwBusy} disabled={!pwReady} onclick={savePassword}>Change password</Button>
+  {/snippet}
+</Dialog>
+
 <style>
+  .pwform {
+    display: grid;
+    gap: 12px;
+  }
   section {
     margin-bottom: 36px;
   }

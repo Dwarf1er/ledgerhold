@@ -322,9 +322,11 @@ export function createMockApi(opts: { today?: string } = {}): Api {
     pickFile: async () => '/home/demo/Downloads/releve-janvier.ofx',
     pickFolder: async () => '/home/demo/Documents/budget',
     uploadFile: async (file) => `/home/demo/Downloads/${file.name}`,
-    session: async () => ({ authRequired: false, authenticated: true }),
+    session: async () => ({ authRequired: false, authenticated: true, setupRequired: false, canChangePassword: false }),
     login: async () => {},
     logout: async () => {},
+    setup: async () => {},
+    changePassword: async () => {},
   };
 
   return api;

@@ -16,3 +16,9 @@ thiserror = "2"
 sha2 = "0.10"
 hex = "0.4"
 ledgerhold-core = { path = "crates/core" }
+
+# Argon2 is deliberately slow; unoptimised it makes every test that sets a password take seconds.
+[profile.dev.package.argon2]
+opt-level = 3
+[profile.dev.package.blake2]
+opt-level = 3

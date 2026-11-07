@@ -24,7 +24,8 @@ export function createHttpApi(fetchFn: Fetch = (...a) => fetch(...a)): Api {
     } catch {
       throw new Error('Cannot reach the Ledgerhold server. Check your connection and try again.');
     }
-    if (res.status === 401 && path !== '/api/login') {
+    // A 401 from these means "wrong password / code", not "your session expired".
+    if (res.status === 401 && !['/api/login', '/api/setup', '/api/password'].includes(path)) {
       notifyUnauthorized();
       throw new UnauthorizedError();
     }
@@ -88,6 +89,12 @@ export function createHttpApi(fetchFn: Fetch = (...a) => fetch(...a)): Api {
     },
     async logout() {
       await send('/api/logout', json({}));
+    },
+    async setup(code, password) {
+      await send('/api/setup', json({ code, password }));
+    },
+    async changePassword(current, newPassword) {
+      await send('/api/password', json({ current, newPassword }));
     },
   };
 }

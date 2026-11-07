@@ -27,7 +27,7 @@ function protectedApi(): Api & { logins: string[] } {
   return {
     ...base,
     logins,
-    session: async () => ({ authRequired: true, authenticated: signedIn }),
+    session: async () => ({ authRequired: true, authenticated: signedIn, setupRequired: false, canChangePassword: true }),
     login: async (pw: string) => {
       logins.push(pw);
       if (pw !== 'secret') throw new Error('wrong password');
@@ -47,6 +47,8 @@ beforeEach(() => {
   session.checked = false;
   session.authRequired = false;
   session.authenticated = true;
+  session.setupRequired = false;
+  session.canChangePassword = false;
   toasts.length = 0;
   capabilities.pickFolder = true;
   go('#/');
@@ -205,5 +207,150 @@ describe('exporting in a browser', () => {
     expect(dlg.getByText('Destination')).toBeTruthy();
     expect((dlg.getByRole('button', { name: /^Export$/ }) as HTMLButtonElement).disabled).toBe(true);
     await waitFor(() => expect(dlg.getByText('Choose a destination folder')).toBeTruthy());
+  });
+});
+
+/** A backend with no password yet, as on the first start of a Docker container. */
+function freshServer(): Api & { setups: { code: string; password: string }[]; changes: string[][] } {
+  const base = createMockApi();
+  let state = { setupRequired: true, authenticated: false };
+  const setups: { code: string; password: string }[] = [];
+  const changes: string[][] = [];
+  return {
+    ...base,
+    setups,
+    changes,
+    session: async () => ({ authRequired: true, authenticated: state.authenticated, setupRequired: state.setupRequired, canChangePassword: !state.setupRequired }),
+    setup: async (code, password) => {
+      setups.push({ code, password });
+      if (code !== 'ABCD-EFGH-JKLM') throw new Error('that setup code is not right');
+      state = { setupRequired: false, authenticated: true };
+    },
+    changePassword: async (current, next) => {
+      changes.push([current, next]);
+      if (current !== 'my household pass') throw new Error('the current password is not right');
+    },
+  };
+}
+
+describe('first-run setup', () => {
+  async function fill(label: string, value: string) {
+    await fireEvent.input(screen.getByLabelText(label), { target: { value } });
+  }
+
+  it('shows the setup screen instead of the sign-in screen and none of the household', async () => {
+    __setApi(freshServer());
+    render(App);
+    expect(await screen.findByRole('heading', { name: 'Choose a password' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).toBeNull();
+    expect(screen.queryByText('Joint chequing')).toBeNull();
+    expect(screen.getByText(/docker compose logs/)).toBeTruthy();
+  });
+
+  it('will not submit until the code is there and the two passwords match and are long enough', async () => {
+    __setApi(freshServer());
+    render(App);
+    await screen.findByRole('heading', { name: 'Choose a password' });
+    const go = () => screen.getByRole('button', { name: 'Set password and continue' }) as HTMLButtonElement;
+    expect(go().disabled).toBe(true);
+    await fill('Setup code', 'ABCD-EFGH-JKLM');
+    await fill('Password', 'short');
+    await fill('Confirm password', 'short');
+    expect(go().disabled).toBe(true);
+    expect(screen.getByText('Use at least 8 characters.')).toBeTruthy();
+    await fill('Password', 'my household pass');
+    expect(screen.getByText('The two passwords do not match.')).toBeTruthy();
+    await fill('Confirm password', 'my household pass');
+    expect(go().disabled).toBe(false);
+  });
+
+  it('a wrong code shows the server message and keeps the form', async () => {
+    const api = freshServer();
+    __setApi(api);
+    render(App);
+    await screen.findByRole('heading', { name: 'Choose a password' });
+    await fill('Setup code', 'WRONG-CODE');
+    await fill('Password', 'my household pass');
+    await fill('Confirm password', 'my household pass');
+    await fireEvent.click(screen.getByRole('button', { name: 'Set password and continue' }));
+    expect(await screen.findByText('that setup code is not right')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Choose a password' })).toBeTruthy();
+    expect((screen.getByLabelText('Password') as HTMLInputElement).value).toBe('my household pass');
+  });
+
+  it('the right code lands you in the app, signed in, with the password section available', async () => {
+    const api = freshServer();
+    __setApi(api);
+    render(App);
+    await screen.findByRole('heading', { name: 'Choose a password' });
+    await fill('Setup code', ' abcd-efgh-jklm '.toUpperCase());
+    await fill('Password', 'my household pass');
+    await fill('Confirm password', 'my household pass');
+    await fireEvent.click(screen.getByRole('button', { name: 'Set password and continue' }));
+    expect(await (await shell()).findByText('Joint chequing')).toBeTruthy();
+    expect(api.setups).toEqual([{ code: 'ABCD-EFGH-JKLM', password: 'my household pass' }]);
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    expect(session.setupRequired).toBe(false);
+  });
+});
+
+describe('changing the password', () => {
+  async function openDialog(api: Api) {
+    __setApi(api);
+    session.canChangePassword = true;
+    go('#/settings');
+    render(App);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Change password' }));
+    return screen.findByRole('dialog');
+  }
+  const base = () => ({ ...createMockApi(), session: async () => ({ authRequired: true, authenticated: true, setupRequired: false, canChangePassword: true }) });
+
+  /** A signed-in server whose password changes are recorded. */
+  function withPasswordChanges() {
+    const f = freshServer();
+    return { ...base(), changePassword: f.changePassword, changes: f.changes };
+  }
+
+  it('is offered in Settings only when the app owns the password', async () => {
+    __setApi({ ...createMockApi(), session: async () => ({ authRequired: true, authenticated: true, setupRequired: false, canChangePassword: false }) });
+    go('#/settings');
+    render(App);
+    await screen.findByRole('heading', { name: 'Banks' });
+    expect(screen.queryByRole('button', { name: 'Change password' })).toBeNull();
+  });
+
+  it('sends the current and new password, then confirms with a toast', async () => {
+    const api = withPasswordChanges();
+    const dialog = within(await openDialog(api));
+    await fireEvent.input(dialog.getByLabelText('Current password'), { target: { value: 'my household pass' } });
+    await fireEvent.input(dialog.getByLabelText('New password'), { target: { value: 'a brand new pass' } });
+    await fireEvent.input(dialog.getByLabelText('Confirm new password'), { target: { value: 'a brand new pass' } });
+    await fireEvent.click(dialog.getByRole('button', { name: 'Change password' }));
+    await waitFor(() => expect(api.changes).toEqual([['my household pass', 'a brand new pass']]));
+    await waitFor(() => expect(toasts.some((t) => t.message.startsWith('Password changed'))).toBe(true));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('shows a wrong current password inside the dialog and stays open', async () => {
+    const api = withPasswordChanges();
+    const dialog = within(await openDialog(api));
+    await fireEvent.input(dialog.getByLabelText('Current password'), { target: { value: 'not it at all' } });
+    await fireEvent.input(dialog.getByLabelText('New password'), { target: { value: 'a brand new pass' } });
+    await fireEvent.input(dialog.getByLabelText('Confirm new password'), { target: { value: 'a brand new pass' } });
+    await fireEvent.click(dialog.getByRole('button', { name: 'Change password' }));
+    expect(await dialog.findByText('the current password is not right')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('keeps the button disabled until the new password is long enough and confirmed', async () => {
+    const dialog = within(await openDialog(base()));
+    const save = () => dialog.getByRole('button', { name: 'Change password' }) as HTMLButtonElement;
+    await fireEvent.input(dialog.getByLabelText('Current password'), { target: { value: 'x' } });
+    await fireEvent.input(dialog.getByLabelText('New password'), { target: { value: 'short' } });
+    await fireEvent.input(dialog.getByLabelText('Confirm new password'), { target: { value: 'short' } });
+    expect(save().disabled).toBe(true);
+    await fireEvent.input(dialog.getByLabelText('New password'), { target: { value: 'long enough pass' } });
+    expect(dialog.getByText('The two passwords do not match.')).toBeTruthy();
+    expect(save().disabled).toBe(true);
   });
 });
