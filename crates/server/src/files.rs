@@ -43,8 +43,9 @@ impl Files {
         let root = data_dir.join("tmp");
         let _ = std::fs::remove_dir_all(&root);
         let (uploads, exports) = (root.join("uploads"), root.join("exports"));
-        std::fs::create_dir_all(&uploads).with_context(|| format!("creating {}", uploads.display()))?;
-        std::fs::create_dir_all(&exports)?;
+        // Statements and exports are sitting here in the clear: owner-only, like the database.
+        ledgerhold_store::create_private_dir(&uploads).with_context(|| format!("creating {}", uploads.display()))?;
+        ledgerhold_store::create_private_dir(&exports)?;
         Ok(Files { uploads, exports })
     }
 
@@ -52,8 +53,8 @@ impl Files {
         let id = Uuid::new_v4();
         let name = sanitize(name);
         let dir = self.uploads.join(id.to_string());
-        std::fs::create_dir_all(&dir)?;
-        std::fs::write(dir.join(&name), bytes)?;
+        ledgerhold_store::create_private_dir(&dir)?;
+        crate::auth::write_private(&dir.join(&name), bytes)?;
         Ok(format!("upload:{id}/{name}"))
     }
 
@@ -77,7 +78,7 @@ impl Files {
     pub fn export_dir(&self, session: &str) -> Result<PathBuf> {
         let id = parse_id(session)?;
         let dir = self.exports.join(id.to_string());
-        std::fs::create_dir_all(&dir)?;
+        ledgerhold_store::create_private_dir(&dir)?;
         Ok(dir)
     }
 

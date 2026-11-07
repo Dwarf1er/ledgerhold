@@ -141,9 +141,6 @@ fn db_path(state: State<'_, AppState>) -> String {
 /// `LEDGERHOLD_DB` overrides the location; otherwise the same file the CLI uses.
 fn open_store() -> anyhow::Result<(Store, PathBuf)> {
     let path = std::env::var_os("LEDGERHOLD_DB").map(PathBuf::from).unwrap_or_else(svc::default_db_path);
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
     let store = Store::open(&path).map_err(|e| anyhow::anyhow!("opening {}: {e}", path.display()))?;
     Ok((store, path))
 }

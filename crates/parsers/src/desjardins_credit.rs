@@ -123,7 +123,11 @@ impl StatementParser for DesjardinsCredit {
     }
 
     fn parse(&self, input: &[u8]) -> Result<Vec<ParsedStatement>, ParseError> {
-        let text = pdf_extract::extract_text_from_mem(input).map_err(|e| ParseError::Pdf(e.to_string()))?;
+        // The PDF library panics on some malformed files. A statement is untrusted input, so turn
+        // that into an ordinary "could not read this file" error instead of taking the app down.
+        let text = std::panic::catch_unwind(|| pdf_extract::extract_text_from_mem(input))
+            .map_err(|_| ParseError::Pdf("the file is not a PDF this reader understands".into()))?
+            .map_err(|e| ParseError::Pdf(e.to_string()))?;
         Ok(vec![parse_text(&text, Local::now().date_naive())])
     }
 }

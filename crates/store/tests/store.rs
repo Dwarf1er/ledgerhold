@@ -328,3 +328,50 @@ fn file_database_persists_and_migrations_are_idempotent() {
         let _ = fs::remove_file(format!("{}{ext}", path.display()));
     }
 }
+
+#[cfg(unix)]
+mod file_permissions {
+    use ledgerhold_store::Store;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
+
+    fn scratch(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("perm-{name}-{}", std::process::id()))
+    }
+    fn mode(p: &std::path::Path) -> u32 {
+        std::fs::metadata(p).unwrap().permissions().mode() & 0o777
+    }
+
+    #[test]
+    fn a_new_database_and_its_folders_are_private() {
+        let root = scratch("new");
+        let _ = std::fs::remove_dir_all(&root);
+        let db = root.join("a/b/ledgerhold.sqlite");
+        let store = Store::open(&db).unwrap();
+        // Writing makes SQLite create its -wal and -shm files; they must be private too.
+        store.add_person("Alex").unwrap();
+        assert_eq!(mode(&db), 0o600);
+        for side in ["-wal", "-shm"] {
+            let p = PathBuf::from(format!("{}{side}", db.display()));
+            if p.exists() {
+                assert_eq!(mode(&p), 0o600, "{}", p.display());
+            }
+        }
+        assert_eq!(mode(db.parent().unwrap()), 0o700);
+        assert_eq!(mode(&root), 0o700);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_existing_world_readable_database_is_tightened() {
+        let root = scratch("old");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let db = root.join("ledgerhold.sqlite");
+        drop(Store::open(&db).unwrap());
+        std::fs::set_permissions(&db, std::fs::Permissions::from_mode(0o644)).unwrap();
+        drop(Store::open(&db).unwrap());
+        assert_eq!(mode(&db), 0o600, "installs made before this was enforced get fixed on next start");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}

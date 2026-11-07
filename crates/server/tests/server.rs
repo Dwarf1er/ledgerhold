@@ -17,6 +17,8 @@ struct Env {
     app: Router,
     dir: PathBuf,
     cookie: Option<String>,
+    /// The `Host` header requests are sent with.
+    host: &'static str,
     /// The first-run setup code, when the server started in setup mode.
     code: Option<String>,
 }
@@ -47,7 +49,9 @@ fn env_with(password: Option<&str>, tweak: impl FnOnce(&mut Config)) -> Env {
     tweak(&mut cfg);
     let state = AppState::open(&cfg).unwrap();
     let code = state.setup_code();
-    Env { app: router(state), dir, cookie: None, code }
+    // A server without a password only answers to local names.
+    let host = if cfg.password.is_none() && cfg.listen.ip().is_loopback() && !cfg.allow_no_auth { "localhost:3000" } else { "ledger.local" };
+    Env { app: router(state), dir, cookie: None, host, code }
 }
 
 fn uuid_like() -> String {
@@ -77,7 +81,7 @@ impl Resp {
 
 impl Env {
     async fn send(&self, method: Method, path: &str, content_type: Option<&str>, body: Vec<u8>, extra: &[(&str, &str)]) -> Resp {
-        let mut b = Request::builder().method(method).uri(path).header(header::HOST, "ledger.local");
+        let mut b = Request::builder().method(method).uri(path).header(header::HOST, self.host);
         if let Some(c) = &self.cookie {
             b = b.header(header::COOKIE, c);
         }
@@ -314,7 +318,7 @@ async fn the_password_chosen_in_setup_survives_a_restart() {
     cfg.listen = "0.0.0.0:3000".parse().unwrap();
     let state = AppState::open(&cfg).unwrap();
     assert!(state.setup_code().is_none(), "no second setup once a password exists");
-    let mut restarted = Env { app: router(state), dir: e.dir.join("elsewhere"), cookie: e.cookie.clone(), code: None };
+    let mut restarted = Env { app: router(state), dir: e.dir.join("elsewhere"), cookie: e.cookie.clone(), host: "ledger.local", code: None };
     assert_eq!(restarted.rpc("overview", json!({})).await.status, StatusCode::OK, "the old cookie still works");
     restarted.cookie = None;
     assert_eq!(restarted.post("/api/login", json!({"password": "wrong password"})).await.status, StatusCode::UNAUTHORIZED);
@@ -345,7 +349,7 @@ async fn reset_password_returns_to_setup_on_the_next_start() {
     let state = AppState::open(&cfg).unwrap();
     let new_code = state.setup_code().expect("setup mode again");
     assert_ne!(new_code, code);
-    let after = Env { app: router(state), dir: e.dir.join("elsewhere"), cookie: e.cookie.clone(), code: Some(new_code) };
+    let after = Env { app: router(state), dir: e.dir.join("elsewhere"), cookie: e.cookie.clone(), host: "ledger.local", code: Some(new_code) };
     assert_eq!(after.rpc("overview", json!({})).await.status, StatusCode::UNAUTHORIZED, "old sessions do not survive a reset");
     assert!(e.dir.join("data/ledgerhold.sqlite").is_file(), "a password reset never touches the data");
 }
@@ -397,7 +401,7 @@ async fn changing_the_password_needs_the_current_one_and_signs_other_sessions_ou
 
     let done = e.post("/api/password", json!({"current": "my household pass", "newPassword": "a brand new pass"})).await;
     assert_eq!(done.status, StatusCode::NO_CONTENT);
-    let mut other = Env { app: e.app.clone(), dir: e.dir.join("elsewhere"), cookie: old_cookie, code: None };
+    let mut other = Env { app: e.app.clone(), dir: e.dir.join("elsewhere"), cookie: old_cookie, host: "ledger.local", code: None };
     assert_eq!(other.rpc("overview", json!({})).await.status, StatusCode::UNAUTHORIZED, "the old session is gone");
     e.take_cookie(&done);
     assert_eq!(e.rpc("overview", json!({})).await.status, StatusCode::OK, "this session carries on");
@@ -595,4 +599,104 @@ async fn the_session_key_persists_so_restarts_keep_you_signed_in() {
     let req = Request::builder().method(Method::POST).uri("/api/rpc/overview").header(header::HOST, "ledger.local")
         .header(header::COOKIE, e.cookie.clone().unwrap()).body(Body::empty()).unwrap();
     assert_eq!(restarted.oneshot(req).await.unwrap().status(), StatusCode::OK);
+}
+
+// ---- hardening ----------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_passwordless_server_refuses_requests_addressed_to_other_names() {
+    // DNS rebinding: a web page points its own hostname at 127.0.0.1 and then calls the API as "local".
+    let e = env_with(None, |_| {});
+    let with_host = |host: &'static str| Env { app: e.app.clone(), dir: e.dir.join("elsewhere"), cookie: None, host, code: None };
+    for ok in ["localhost", "localhost:3000", "127.0.0.1:3000", "[::1]:3000", "LOCALHOST:8080", "ledger.localhost"] {
+        assert_eq!(with_host(ok).rpc("overview", json!({})).await.status, StatusCode::OK, "{ok}");
+    }
+    for bad in ["evil.example", "evil.example:3000", "127.0.0.1.evil.example", "localhost.evil.example", "192.168.1.5:3000", "", "evil.example:3000/localhost"] {
+        let env = with_host(bad);
+        assert_eq!(env.rpc("overview", json!({})).await.status, StatusCode::FORBIDDEN, "POST {bad:?}");
+        assert_eq!(env.get("/api/session").await.status, StatusCode::FORBIDDEN, "GET {bad:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_passwordless_server_can_be_told_its_public_name() {
+    let e = env_with(None, |c| c.allowed_origins = vec!["https://ledger.example.com".into()]);
+    let named = Env { app: e.app.clone(), dir: e.dir.join("elsewhere"), cookie: None, host: "ledger.example.com", code: None };
+    assert_eq!(named.rpc("overview", json!({})).await.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn servers_with_a_password_do_not_care_which_name_they_are_reached_by() {
+    // The password, not the hostname, protects them (and proxies rewrite Host freely).
+    let mut e = env();
+    e.host = "anything.example";
+    e.login().await;
+    assert_eq!(e.rpc("overview", json!({})).await.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn a_flood_of_simultaneous_bad_logins_is_locked_out_not_all_hashed() {
+    let e = env();
+    let mut set = tokio::task::JoinSet::new();
+    for _ in 0..60 {
+        let app = e.app.clone();
+        set.spawn(async move {
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri("/api/login")
+                .header(header::HOST, "ledger.local")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(json!({"password": "guess guess"}).to_string()))
+                .unwrap();
+            app.oneshot(req).await.unwrap().status()
+        });
+    }
+    let mut wrong = 0;
+    let mut locked = 0;
+    while let Some(r) = set.join_next().await {
+        match r.unwrap() {
+            StatusCode::UNAUTHORIZED => wrong += 1,
+            StatusCode::TOO_MANY_REQUESTS => locked += 1,
+            other => panic!("unexpected {other}"),
+        }
+    }
+    // Ten failures lock the door; a couple already in flight may finish, the queued rest are turned away.
+    assert!((10..=12).contains(&wrong), "{wrong} attempts were actually checked");
+    assert_eq!(wrong + locked, 60);
+}
+
+#[cfg(unix)]
+mod permissions {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn mode(p: &std::path::Path) -> u32 {
+        std::fs::metadata(p).unwrap_or_else(|e| panic!("{}: {e}", p.display())).permissions().mode() & 0o777
+    }
+
+    #[tokio::test]
+    async fn everything_the_server_writes_is_private_to_its_user() {
+        let mut e = fresh_server();
+        let code = setup_code(&e);
+        let done = e.post("/api/setup", json!({"code": code, "password": "my household pass"})).await;
+        e.take_cookie(&done);
+        let up = e.upload("statement.csv", fixture("synthetic/desjardins.csv")).await;
+        assert_eq!(up.status, StatusCode::OK);
+
+        let data = e.dir.join("data");
+        let mut checked = 0;
+        let mut stack = vec![data.clone()];
+        while let Some(p) = stack.pop() {
+            let m = mode(&p);
+            assert_eq!(m & 0o077, 0, "{} is accessible to others (mode {m:o})", p.display());
+            checked += 1;
+            if p.is_dir() {
+                stack.extend(std::fs::read_dir(&p).unwrap().map(|r| r.unwrap().path()));
+            }
+        }
+        for f in ["ledgerhold.sqlite", "session.key", "password.hash"] {
+            assert!(data.join(f).is_file(), "{f}");
+        }
+        assert!(checked >= 8, "only looked at {checked} paths");
+    }
 }

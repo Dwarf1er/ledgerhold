@@ -253,15 +253,24 @@ impl Auth {
     }
 }
 
+/// Write `bytes` to a file that is owner-only from the moment it exists (no chmod-after-write window).
+pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(path).with_context(|| format!("writing {}", path.display()))?;
+    f.write_all(bytes).with_context(|| format!("writing {}", path.display()))
+}
+
 /// Write the hash atomically with owner-only permissions.
 fn persist(path: &Path, phc: &str) -> Result<()> {
     let tmp = path.with_extension("hash.tmp");
-    std::fs::write(&tmp, format!("{phc}\n")).with_context(|| format!("writing {}", tmp.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600));
-    }
+    write_private(&tmp, format!("{phc}\n").as_bytes())?;
     std::fs::rename(&tmp, path).with_context(|| format!("saving {}", path.display()))
 }
 

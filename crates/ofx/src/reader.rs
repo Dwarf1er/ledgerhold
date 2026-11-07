@@ -57,7 +57,9 @@ struct Stmt {
 
 pub fn read(bytes: &[u8]) -> Result<Vec<ParsedStatement>, ReadError> {
     let text = decode(bytes);
-    let upper_start = text.to_uppercase().find("<OFX>").ok_or(ReadError::NotOfx)?;
+    // ASCII-only upper-casing keeps byte offsets identical to `text`; full Unicode upper-casing can change
+    // a character's length (e.g. "ŉ"), which made this slice land out of bounds or inside a character.
+    let upper_start = text.to_ascii_uppercase().find("<OFX>").ok_or(ReadError::NotOfx)?;
     let body = &text[upper_start..];
 
     let mut out: Vec<ParsedStatement> = Vec::new();

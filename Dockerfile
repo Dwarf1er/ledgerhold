@@ -20,18 +20,19 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
 # The desktop shell (Tauri) isn't needed here and drags in GTK/WebKit: drop it from the workspace.
+# (That prunes Cargo.lock, so `--locked` can't be used; every remaining crate keeps its locked version.)
 RUN sed -i 's/, "src-tauri"//' Cargo.toml
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --release -p ledgerhold-server \
- && mkdir -p /out/data \
+ && install -d -m 700 /out/data \
  && cp target/release/ledgerhold-server /out/
 
 # ---- 3. Runtime: no shell, no package manager, not root --------------------------------
 FROM gcr.io/distroless/cc-debian12:nonroot
 COPY --from=server /out/ledgerhold-server /usr/local/bin/ledgerhold-server
 # A pre-owned /data means a fresh named volume is writable by the non-root user.
-COPY --from=server --chown=65532:65532 /out/data /data
+COPY --from=server --chown=65532:65532 --chmod=0700 /out/data /data
 COPY --from=ui /src/ui/dist /app/ui
 
 ENV LEDGERHOLD_LISTEN=0.0.0.0:3000 \

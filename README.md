@@ -133,10 +133,11 @@ docker compose logs ledgerhold     # prints a one-time setup code
 
 Open [http://localhost:3000](http://localhost:3000), enter the setup code, and choose the household password. That's
 the whole setup: there's no `.env` file to write and no password sitting in your configuration. The first build compiles
-the server and takes a few minutes. Each release also publishes a multi-arch image:
+the server and takes a few minutes. By default it only listens on this computer; set `LEDGERHOLD_BIND=0.0.0.0` in a
+`.env` file to reach it from your phone or another PC (and read [HTTPS and reverse proxies](#https-and-reverse-proxies)). Each release also publishes a multi-arch image:
 
 ```bash
-docker run -d --name ledgerhold -p 3000:3000 -e TZ=America/Toronto \
+docker run -d --name ledgerhold -p 127.0.0.1:3000:3000 -e TZ=America/Toronto \
   -v ledgerhold-data:/data ghcr.io/dwarf1er/ledgerhold:latest
 docker logs ledgerhold             # the setup code
 ```
@@ -253,6 +254,7 @@ Set these as environment variables (in `.env` for Docker Compose):
 | `LEDGERHOLD_PASSWORD` | Optional. Sets the household password from the environment (8 or more characters) instead of the browser setup. The web UI then can't change it. |
 | `TZ` | Your timezone, e.g. `America/Toronto`, so "today" and month boundaries are right. Defaults to `UTC`. |
 | `LEDGERHOLD_PORT` | Host port for Docker Compose. Defaults to `3000`. |
+| `LEDGERHOLD_BIND` | Which host address Docker Compose listens on. Defaults to `127.0.0.1` (this computer only). Set `0.0.0.0` to reach it from other devices on your network. |
 | `LEDGERHOLD_ALLOWED_ORIGINS` | Extra comma-separated origins allowed to use the API, for a proxy that rewrites the `Host` header, e.g. `https://ledger.example.com`. |
 | `LEDGERHOLD_SECRET` | Key used to sign sign-ins. Generated and kept beside the database by default. |
 | `LEDGERHOLD_ALLOW_NO_AUTH` | Set to `1` to serve with no password at all, only if something in front handles authentication. |
@@ -283,7 +285,9 @@ Setting `LEDGERHOLD_PASSWORD` skips setup and takes precedence. Running on `127.
 
 ### HTTPS and reverse proxies
 
-On your home network plain HTTP is fine. Anywhere else, put it behind a reverse proxy that terminates HTTPS. The proxy
+Plain HTTP sends the password and the session cookie unencrypted, so anyone on the same network (shared Wi-Fi, say)
+could read them. That may be an acceptable trade on a trusted home network; anywhere else, put it behind a reverse proxy
+that terminates HTTPS. The proxy
 must pass the original `Host` header and `X-Forwarded-Proto`; the latter marks the sign-in cookie `Secure`. With Caddy:
 
 ```
@@ -311,6 +315,8 @@ To update, pull and rebuild: `git pull && docker compose up -d --build`. Databas
 
 ### Security model
 
+The full picture, including what Ledgerhold does *not* protect against, is in [SECURITY.md](SECURITY.md). In short:
+
 * One shared password for the household. There are no per-person logins or roles; people are labels on accounts.
 * There is no default password. Until one is chosen, the server serves nothing but the setup screen, which needs a code
   that only appears in the server log. The password is kept as a salted argon2 hash, and setup attempts are throttled
@@ -318,9 +324,12 @@ To update, pull and rebuild: `git pull && docker compose up -d --build`. Databas
 * Sign-ins are signed, `HttpOnly`, `SameSite=Strict` cookies that last 30 days. Failed logins are slowed down and
   limited to ten a minute.
 * Writes from other websites are refused, and responses carry a strict Content-Security-Policy.
+* The database, uploads and exports are readable only by the user running Ledgerhold. The database is **not**
+  encrypted, so use disk encryption on the machine that holds it.
 * Uploaded statements are kept in a temporary folder only until imported (and swept within about an hour if you never
   import them). Exports are kept for about an hour so you can download them.
-* The container runs as a non-root user on a shell-less base image.
+* The container runs as a non-root user on a shell-less base image and, by default, only listens on this computer.
+* The desktop app and the command-line tool never use the network.
 
 ## Where your data lives
 

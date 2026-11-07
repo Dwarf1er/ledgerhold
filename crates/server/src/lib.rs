@@ -87,21 +87,43 @@ pub struct AppState {
     files: Files,
     static_dir: PathBuf,
     allowed_origins: Vec<String>,
+    /// Open on loopback: only answer requests addressed to a local name (defeats DNS rebinding).
+    local_hosts_only: bool,
+    /// Argon2 is memory-hungry; never run more than a couple of hashes at once.
+    hash_slots: tokio::sync::Semaphore,
+}
+
+/// Is `host` (a `Host` header, with optional port) a name that means "this machine"?
+fn is_local_host(host: &str) -> bool {
+    let name = if let Some(rest) = host.strip_prefix('[') {
+        rest.split(']').next().unwrap_or("")
+    } else {
+        host.rsplit_once(':').map_or(host, |(h, _)| h)
+    };
+    let name = name.trim_end_matches('.').to_ascii_lowercase();
+    name == "localhost" || name.ends_with(".localhost") || name == "::1" || name.parse::<std::net::Ipv4Addr>().is_ok_and(|ip| ip.is_loopback())
+}
+
+fn host_of(origin: &str) -> &str {
+    origin.strip_prefix("http://").or_else(|| origin.strip_prefix("https://")).unwrap_or(origin).trim_end_matches('/')
 }
 
 impl AppState {
     pub fn open(cfg: &Config) -> Result<Arc<AppState>> {
         cfg.validate()?;
         let data_dir = cfg.data_dir();
-        std::fs::create_dir_all(&data_dir).with_context(|| format!("creating {}", data_dir.display()))?;
+        ledgerhold_store::create_private_dir(&data_dir).with_context(|| format!("creating {}", data_dir.display()))?;
         let store = Store::open(&cfg.db_path).map_err(|e| anyhow::anyhow!("opening {}: {e}", cfg.db_path.display()))?;
         let key = match &cfg.secret {
             Some(s) => s.as_bytes().to_vec(),
             None => load_or_create_key(&data_dir.join("session.key"))?,
         };
+        let auth = choose_auth(cfg, &data_dir, key)?;
         Ok(Arc::new(AppState {
             store: Mutex::new(store),
-            auth: choose_auth(cfg, &data_dir, key)?,
+            local_hosts_only: auth.mode() == auth::Mode::Open && !cfg.allow_no_auth,
+            hash_slots: tokio::sync::Semaphore::new(2),
+            auth,
             files: Files::new(&data_dir)?,
             static_dir: cfg.static_dir.clone(),
             allowed_origins: cfg.allowed_origins.clone(),
@@ -155,12 +177,7 @@ fn load_or_create_key(path: &FsPath) -> Result<Vec<u8>> {
     let mut key = Vec::new();
     key.extend_from_slice(uuid::Uuid::new_v4().as_bytes());
     key.extend_from_slice(uuid::Uuid::new_v4().as_bytes());
-    std::fs::write(path, hex::encode(&key)).with_context(|| format!("writing {}", path.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
-    }
+    auth::write_private(path, hex::encode(&key).as_bytes())?;
     Ok(key)
 }
 
@@ -222,6 +239,18 @@ fn authenticated(state: &AppState, headers: &HeaderMap) -> bool {
 
 /// Reject cross-site writes: a browser always sends `Origin` on cross-origin POSTs.
 async fn check_origin(State(state): State<Arc<AppState>>, req: Request, next: Next) -> Response {
+    // With no password the only protection is "you are on this machine". A web page can point its own
+    // hostname at 127.0.0.1 (DNS rebinding) and then talk to us as if it were local, so insist on a local name.
+    if state.local_hosts_only {
+        let host = req.headers().get(header::HOST).and_then(|v| v.to_str().ok()).unwrap_or("");
+        let configured = state.allowed_origins.iter().any(|o| host_of(o).eq_ignore_ascii_case(host));
+        if !is_local_host(host) && !configured {
+            return error(
+                StatusCode::FORBIDDEN,
+                "this server has no password, so it only answers to localhost; set a password or LEDGERHOLD_ALLOWED_ORIGINS",
+            );
+        }
+    }
     if !matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS)
         && let Some(origin) = req.headers().get(header::ORIGIN).and_then(|v| v.to_str().ok())
     {
@@ -273,8 +302,10 @@ fn session_cookie(state: &AppState, headers: &HeaderMap) -> Response {
     (StatusCode::NO_CONTENT, [(header::SET_COOKIE, cookie)]).into_response()
 }
 
-/// Argon2 takes tens of milliseconds of CPU: keep it off the async threads.
-async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+/// Argon2 takes tens of milliseconds of CPU and ~19 MiB of memory: keep it off the async threads, and only
+/// run a couple at a time so a flood of unauthenticated requests queues up instead of exhausting memory.
+async fn blocking<T: Send + 'static>(state: &AppState, f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    let _slot = state.hash_slots.acquire().await.ok()?;
     tokio::task::spawn_blocking(f).await.ok()
 }
 
@@ -295,8 +326,13 @@ async fn login(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(body
         return error(StatusCode::TOO_MANY_REQUESTS, THROTTLED);
     }
     let s = state.clone();
-    if !blocking(move || s.auth.check_password(&body.password)).await.unwrap_or(false) {
-        return wrong(&state, "wrong password").await;
+    let password = body.password;
+    let verdict = blocking(&state, move || (!s.auth.throttled()).then(|| s.auth.check_password(&password))).await;
+    match verdict {
+        Some(Some(true)) => {}
+        // Waited in the queue while others failed: the lockout applies to us too.
+        Some(None) => return error(StatusCode::TOO_MANY_REQUESTS, THROTTLED),
+        _ => return wrong(&state, "wrong password").await,
     }
     session_cookie(&state, &headers)
 }
@@ -322,7 +358,7 @@ async fn setup(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(body
         return error(StatusCode::BAD_REQUEST, m);
     }
     let password = body.password;
-    let Some(Ok(phc)) = blocking(move || auth::hash_password(&password)).await else {
+    let Some(Ok(phc)) = blocking(&state, move || auth::hash_password(&password)).await else {
         return error(StatusCode::INTERNAL_SERVER_ERROR, "could not hash the password");
     };
     match state.auth.complete_setup(&body.code, phc) {
@@ -350,14 +386,14 @@ async fn change_password(State(state): State<Arc<AppState>>, headers: HeaderMap,
     }
     let s = state.clone();
     let current = body.current;
-    if !blocking(move || s.auth.check_password(&current)).await.unwrap_or(false) {
+    if !blocking(&state, move || s.auth.check_password(&current)).await.unwrap_or(false) {
         return wrong(&state, "the current password is not right").await;
     }
     if let Err(m) = auth::validate_password(&body.new_password) {
         return error(StatusCode::BAD_REQUEST, m);
     }
     let new_password = body.new_password;
-    let Some(Ok(phc)) = blocking(move || auth::hash_password(&new_password)).await else {
+    let Some(Ok(phc)) = blocking(&state, move || auth::hash_password(&new_password)).await else {
         return error(StatusCode::INTERNAL_SERVER_ERROR, "could not hash the password");
     };
     if let Err(e) = state.auth.change_password(phc) {

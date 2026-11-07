@@ -9,7 +9,9 @@ services:
     container_name: ledgerhold
     restart: unless-stopped
     ports:
-      - "${LEDGERHOLD_PORT:-3000}:3000"
+      # Local-only by default. To reach it from other devices on your network, set LEDGERHOLD_BIND=0.0.0.0
+      # (and prefer HTTPS: see the README).
+      - "${LEDGERHOLD_BIND:-127.0.0.1}:${LEDGERHOLD_PORT:-3000}:3000"
     environment:
       # Your timezone, so "today" and month boundaries are right (e.g. America/Toronto).
       TZ: ${TZ:-UTC}

@@ -65,6 +65,9 @@ stored=$(docker cp "$name:/data/password.hash" - | tar -xO) || fail "the passwor
 case "$stored" in '$argon2'*) ;; *) fail "stored password is not an argon2 hash" ;; esac
 case "$stored" in *"$password"*) fail "password stored in plain text" ;; esac
 ok "password persisted as a hash"
+loose=$(docker cp "$name:/data" - | tar -tvf - | awk '$1 !~ /^[-d]rw[x-]------/ {print}') || true
+[ -z "$loose" ] || fail "files in /data readable by others: $loose"
+ok "everything in /data is owner-only"
 
 # 2. Restart: the password, the sign-in and the data all survive; there is no second setup.
 docker restart "$name" >/dev/null
