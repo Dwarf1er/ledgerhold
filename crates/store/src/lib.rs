@@ -28,6 +28,18 @@ pub fn create_private_dir(dir: &Path) -> std::io::Result<()> {
     builder.create(dir)
 }
 
+/// Make an existing directory owner-only (mode 0700 on Unix). Best effort: a directory we don't own is left alone.
+/// Used for a dedicated data folder that may have been created by something else (a container volume, an older install).
+pub fn restrict_dir_to_owner(dir: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+    }
+    #[cfg(not(unix))]
+    let _ = dir;
+}
+
 /// Create an empty file at `path` if there is none, readable only by the current user.
 pub fn create_private_file(path: &Path) -> std::io::Result<()> {
     let mut opts = std::fs::OpenOptions::new();

@@ -113,6 +113,8 @@ impl AppState {
         cfg.validate()?;
         let data_dir = cfg.data_dir();
         ledgerhold_store::create_private_dir(&data_dir).with_context(|| format!("creating {}", data_dir.display()))?;
+        // A volume or an older install may have made the folder world-readable; don't depend on how it was created.
+        ledgerhold_store::restrict_dir_to_owner(&data_dir);
         let store = Store::open(&cfg.db_path).map_err(|e| anyhow::anyhow!("opening {}: {e}", cfg.db_path.display()))?;
         let key = match &cfg.secret {
             Some(s) => s.as_bytes().to_vec(),

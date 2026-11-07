@@ -374,4 +374,15 @@ mod file_permissions {
         assert_eq!(mode(&db), 0o600, "installs made before this was enforced get fixed on next start");
         let _ = std::fs::remove_dir_all(&root);
     }
+
+    #[test]
+    fn an_existing_world_readable_folder_is_tightened() {
+        let root = scratch("dir");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o755)).unwrap();
+        ledgerhold_store::restrict_dir_to_owner(&root);
+        assert_eq!(mode(&root), 0o700);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
