@@ -314,12 +314,14 @@ describe('settings', () => {
     expect(await main().findByText('Samantha')).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
-    await fireEvent.click(main().getByRole('button', { name: 'Rename Joint chequing' }));
+    await fireEvent.click(main().getByRole('button', { name: 'Edit Joint chequing' }));
     const dlg2 = within(await screen.findByRole('dialog'));
     await fireEvent.input(dlg2.getByLabelText('Name'), { target: { value: 'Household' } });
+    await fireEvent.input(dlg2.getByLabelText(/Account or card number/), { target: { value: 'NEW-999' } });
     await fireEvent.click(dlg2.getByRole('button', { name: 'Save' }));
     expect(await main().findByText('Household')).toBeTruthy();
     expect(main().queryByText('Joint chequing')).toBeNull();
+    expect(main().getByText(/999/)).toBeTruthy();
   });
 
   it('removes a person but keeps their accounts, and resets the household filter', async () => {

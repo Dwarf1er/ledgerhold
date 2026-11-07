@@ -97,6 +97,18 @@ fn people_and_accounts_can_be_renamed() {
 }
 
 #[test]
+fn account_number_can_be_set_changed_and_cleared() {
+    let f = fx();
+    f.store.update_account(&f.acct, "Joint", Some("12345")).unwrap();
+    assert_eq!(f.store.get_account(&f.acct).unwrap().external_account_id.as_deref(), Some("12345"));
+    f.store.update_account(&f.acct, "Joint", Some("67890")).unwrap();
+    assert_eq!(f.store.get_account(&f.acct).unwrap().external_account_id.as_deref(), Some("67890"));
+    f.store.update_account(&f.acct, "Joint", None).unwrap();
+    assert_eq!(f.store.get_account(&f.acct).unwrap().external_account_id, None);
+    assert!(matches!(f.store.update_account("nope", "x", None), Err(StoreError::NotFound(_))));
+}
+
+#[test]
 fn people_get_distinct_colours_that_can_be_chosen_and_changed() {
     let f = fx();
     let a = f.store.add_person("Antoine", None).unwrap();

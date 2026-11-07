@@ -331,6 +331,15 @@ pub fn rename_account(store: &Store, id: &str, name: &str) -> Result<()> {
     Ok(store.rename_account(id, name)?)
 }
 
+pub fn update_account(store: &Store, id: &str, name: &str, number: Option<&str>) -> Result<()> {
+    let name = name.trim();
+    if name.is_empty() {
+        bail!("name is required");
+    }
+    let number = number.map(str::trim).filter(|n| !n.is_empty());
+    Ok(store.update_account(id, name, number)?)
+}
+
 /// Returns how many transactions went with the account.
 pub fn delete_account(store: &Store, id: &str) -> Result<usize> {
     Ok(store.delete_account(id)?)

@@ -108,6 +108,12 @@ fn rename_and_delete_over_json() {
                           "number": null, "ownerIds": [alex["id"]]}}),
     );
     ok(&mut s, "rename_account", json!({"id": acct, "name": "Household"}));
+    ok(&mut s, "update_account", json!({"id": acct, "name": " Home ", "number": " 555 "}));
+    let ov = ok(&mut s, "overview", json!({}));
+    assert_eq!(ov["accounts"][0]["account"]["name"], "Home");
+    assert_eq!(ov["accounts"][0]["account"]["number"], "555");
+    ok(&mut s, "update_account", json!({"id": acct, "name": "Household", "number": "  "}));
+    assert!(ok(&mut s, "overview", json!({}))["accounts"][0]["account"]["number"].is_null());
     let ov = ok(&mut s, "overview", json!({}));
     assert_eq!(ov["accounts"][0]["account"]["name"], "Household");
 

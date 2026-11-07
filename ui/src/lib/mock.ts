@@ -316,6 +316,13 @@ export function createMockApi(opts: { today?: string } = {}): Api {
       find(aid).name = name.trim();
       return delay(undefined);
     },
+    updateAccount: async (aid, name, number) => {
+      if (!name.trim()) throw new Error('name is required');
+      const a = find(aid);
+      a.name = name.trim();
+      a.number = number?.trim() || null;
+      return delay(undefined);
+    },
     deleteAccount: async (aid) => {
       find(aid);
       const n = txns.get(aid)!.length;

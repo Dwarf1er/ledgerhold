@@ -60,6 +60,7 @@ pub const COMMANDS: &[&str] = &[
     "delete_institution",
     "add_account",
     "rename_account",
+    "update_account",
     "delete_account",
     "set_owners",
     "db_path",
@@ -140,6 +141,12 @@ struct Rename {
     name: String,
 }
 #[derive(Deserialize)]
+struct UpdateAccount {
+    id: String,
+    name: String,
+    number: Option<String>,
+}
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Institution {
     name: String,
@@ -217,6 +224,10 @@ pub fn call(store: &mut Store, command: &str, a: Value, ctx: &RpcContext<'_>) ->
         "rename_account" => {
             let a: Rename = args(a)?;
             out(svc::rename_account(store, &a.id, &a.name))
+        }
+        "update_account" => {
+            let a: UpdateAccount = args(a)?;
+            out(svc::update_account(store, &a.id, &a.name, a.number.as_deref()))
         }
         "delete_account" => {
             let a: PersonId = args(a)?;

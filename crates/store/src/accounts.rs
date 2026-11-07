@@ -189,6 +189,19 @@ impl Store {
         Ok(())
     }
 
+    /// Change an account's name and printed number (`None` clears the number).
+    pub fn update_account(&self, id: &str, name: &str, external_account_id: Option<&str>) -> Result<()> {
+        let n = self.conn.execute(
+            "UPDATE account SET name = ?2, external_account_id = ?3,
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1",
+            params![id, name, external_account_id],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(format!("account {id}")));
+        }
+        Ok(())
+    }
+
     /// Remove an account with everything under it (transactions, imports, balances, owners).
     /// Returns the number of transactions removed.
     pub fn delete_account(&self, id: &str) -> Result<usize> {

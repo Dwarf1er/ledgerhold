@@ -34,7 +34,8 @@
 
   // Rename (people and accounts share one dialog) and delete.
   let renameOpen = $state(false);
-  let renameTarget = $state<{ kind: 'person' | 'account'; id: string; current: string; color?: string } | null>(null);
+  let renameTarget = $state<{ kind: 'person' | 'account'; id: string; current: string; color?: string; number?: string } | null>(null);
+  let renameNumber = $state('');
   let renameColor = $state('');
   let renameValue = $state('');
   let renameBusy = $state(false);
@@ -121,8 +122,9 @@
     }
   }
 
-  function startRename(kind: 'person' | 'account', id: string, current: string, color?: string) {
-    renameTarget = { kind, id, current, color };
+  function startRename(kind: 'person' | 'account', id: string, current: string, color?: string, number?: string | null) {
+    renameTarget = { kind, id, current, color, number: number ?? '' };
+    renameNumber = number ?? '';
     renameValue = current;
     renameColor = color ?? '';
     renameError = null;
@@ -133,7 +135,7 @@
     const t = renameTarget;
     const name = renameValue.trim();
     if (!t || !name) return;
-    if (name === t.current && renameColor === (t.color ?? '')) {
+    if (name === t.current && renameColor === (t.color ?? '') && renameNumber.trim() === (t.number ?? '')) {
       renameOpen = false;
       return;
     }
@@ -141,9 +143,9 @@
     renameError = null;
     try {
       if (t.kind === 'person') await api.updatePerson(t.id, name, renameColor || null);
-      else await api.renameAccount(t.id, name);
+      else await api.updateAccount(t.id, name, renameNumber.trim() || null);
       await refresh();
-      toast(t.kind === 'person' ? `Saved ${name}` : `Renamed to ${name}`, 'success');
+      toast(t.kind === 'person' ? `Saved ${name}` : `Saved ${name}`, 'success');
       renameOpen = false;
     } catch (err) {
       renameError = errMsg(err);
@@ -242,8 +244,8 @@
       <div class="line">
         <Avatar name={p.name} color={p.color} size={24} /> <span>{p.name}</span>
         <span class="push actions">
-          <Button variant="ghost" size="sm" aria-label={`Edit ${p.name}`} onclick={() => startRename('person', p.id, p.name, p.color)}>Edit</Button>
-          <Button variant="ghost" size="sm" aria-label={`Remove ${p.name}`} onclick={() => { personToDelete = p; deletePersonOpen = true; }}>Remove</Button>
+          <Button variant="ghost" size="sm" aria-label={`Edit ${p.name}`} onclick={() => startRename('person', p.id, p.name, p.color)}><Icon name="pencil" size={14} /></Button>
+          <Button variant="ghost" size="sm" aria-label={`Remove ${p.name}`} onclick={() => { personToDelete = p; deletePersonOpen = true; }}><Icon name="trash" size={14} /></Button>
         </span>
       </div>
     {:else}
@@ -271,8 +273,8 @@
         <span>{i.name}</span>
         {#if i.bankId}<span class="muted mono push">ID {i.bankId}</span>{/if}
         <span class="actions" class:push={!i.bankId}>
-          <Button variant="ghost" size="sm" aria-label={`Edit ${i.name}`} onclick={() => startEditBank(i)}>Edit</Button>
-          <Button variant="ghost" size="sm" aria-label={`Delete ${i.name}`} onclick={() => { bankToDelete = i; deleteBankOpen = true; }}>Delete</Button>
+          <Button variant="ghost" size="sm" aria-label={`Edit ${i.name}`} onclick={() => startEditBank(i)}><Icon name="pencil" size={14} /></Button>
+          <Button variant="ghost" size="sm" aria-label={`Delete ${i.name}`} onclick={() => { bankToDelete = i; deleteBankOpen = true; }}><Icon name="trash" size={14} /></Button>
         </span>
       </div>
     {:else}
@@ -303,8 +305,8 @@
         <span class="push owners">
           {#each ownersOf(s.account.ownerIds) as p (p.id)}<Avatar name={p.name} color={p.color} size={20} />{/each}
           <Button variant="ghost" size="sm" onclick={() => editOwners(s)}>Owners</Button>
-          <Button variant="ghost" size="sm" aria-label={`Rename ${s.account.name}`} onclick={() => startRename('account', s.account.id, s.account.name)}>Rename</Button>
-          <Button variant="ghost" size="sm" aria-label={`Delete ${s.account.name}`} onclick={() => { accountToDelete = s; deleteAccountOpen = true; }}>Delete</Button>
+          <Button variant="ghost" size="sm" aria-label={`Edit ${s.account.name}`} onclick={() => startRename('account', s.account.id, s.account.name, undefined, s.account.number)}><Icon name="pencil" size={14} /></Button>
+          <Button variant="ghost" size="sm" aria-label={`Delete ${s.account.name}`} onclick={() => { accountToDelete = s; deleteAccountOpen = true; }}><Icon name="trash" size={14} /></Button>
         </span>
       </div>
     {:else}
@@ -361,12 +363,18 @@
   {/snippet}
 </Dialog>
 
-<Dialog bind:open={renameOpen} title={renameTarget?.kind === 'account' ? 'Rename account' : 'Edit person'} description={renameTarget?.current} width={400}>
+<Dialog bind:open={renameOpen} title={renameTarget?.kind === 'account' ? 'Edit account' : 'Edit person'} description={renameTarget?.current} width={400}>
   <form onsubmit={(e) => { e.preventDefault(); saveRename(); }}>
     <div class="field">
       <label for="rename-name">Name</label>
       <input id="rename-name" class="input" bind:value={renameValue} autocomplete="off" data-autofocus />
     </div>
+    {#if renameTarget?.kind === 'account'}
+      <div class="field">
+        <label for="rename-number">Account or card number <span class="muted">(optional)</span></label>
+        <input id="rename-number" class="input mono" placeholder="As printed on statements" bind:value={renameNumber} autocomplete="off" />
+      </div>
+    {/if}
     {#if renameTarget?.kind === 'person'}
       <div class="field colour">
         <span class="label">Avatar colour</span>

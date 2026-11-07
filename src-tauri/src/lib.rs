@@ -128,6 +128,12 @@ fn delete_person(state: State<'_, AppState>, id: String) -> R<()> {
 }
 
 #[tauri::command(async)]
+fn update_account(state: State<'_, AppState>, id: String, name: String, number: Option<String>) -> R<()> {
+    let store = lock(&state)?;
+    svc::update_account(&store, &id, &name, number.as_deref()).map_err(msg)
+}
+
+#[tauri::command(async)]
 fn rename_account(state: State<'_, AppState>, id: String, name: String) -> R<()> {
     let store = lock(&state)?;
     svc::rename_account(&store, &id, &name).map_err(msg)
@@ -205,6 +211,7 @@ pub fn run() {
             update_person,
             delete_person,
             rename_account,
+            update_account,
             delete_account,
             add_institution,
             update_institution,
