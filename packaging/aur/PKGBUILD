@@ -4,7 +4,7 @@
 # After tagging a release, bump pkgver and run `updpkgsums` to fill in the checksums, then publish with
 # `makepkg --printsrcinfo > .SRCINFO` and push to the AUR.
 pkgname=ledgerhold-bin
-pkgver=0.6.0
+pkgver=0.7.0
 pkgrel=1
 pkgdesc='Household bank ledger: import, dedupe, reconcile and export OFX (desktop app + CLI)'
 arch=('x86_64' 'aarch64')

@@ -77,13 +77,33 @@ fn legacy_statement_with_sequence_numbers() {
 }
 
 #[test]
-fn lines_before_the_table_header_are_ignored() {
-    let text = "DATE DU RELEVÉ Jour 21 Mois 01 Année 2026\n\
-        01 01 01 01 NOT YET IN TABLE 9,99\n\
+fn rows_before_the_header_line_are_kept() {
+    // pdf-extract can emit table rows ahead of the header line (content-stream order).
+    let text = "DATE DU RELEVÉ 21 01 2026\n\
+        01 01 01 01 ROW BEFORE HEADER 9,99\n\
         Transactions effectuées avec la carte de X\n\
-        02 01 03 01 REAL ONE 1,00\n";
+        02 01 03 01 ROW AFTER 1,00\n";
     let st = parse_text(text, NaiveDate::from_ymd_opt(2000, 1, 1).unwrap());
-    assert_eq!(st.transactions.len(), 1);
+    assert_eq!(st.transactions.len(), 2);
+}
+
+#[test]
+fn no_table_header_means_no_transactions() {
+    let text = "DATE DU RELEVÉ 21 01 2026\n01 01 01 01 SOMETHING ELSE 9,99\n";
+    let st = parse_text(text, NaiveDate::from_ymd_opt(2000, 1, 1).unwrap());
+    assert!(st.transactions.is_empty());
+}
+
+#[test]
+fn rewards_column_is_not_part_of_the_description() {
+    let text = "DATE DU RELEVÉ 08 06 2026\n\
+        Transactions effectuées avec la carte de X\n\
+        05 06 06 06 EPICERIE      1,00 %        25,00\n\
+        05 06 06 06 PAIEMENT 100,00CR\n";
+    let st = parse_text(text, NaiveDate::from_ymd_opt(2000, 1, 1).unwrap());
+    assert_eq!(st.transactions[0].description, "EPICERIE");
+    assert_eq!(st.transactions[0].amount.minor(), -2500);
+    assert_eq!(st.transactions[1].amount.minor(), 10000);
 }
 
 #[test]

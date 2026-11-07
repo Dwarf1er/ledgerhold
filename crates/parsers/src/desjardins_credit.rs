@@ -5,8 +5,8 @@
 //!    pdfplumber are the main porting risk; see `fixtures/` PDF test.
 //! 2. [`parse_text`]: pure line scanning, a port of the legacy state machine.
 //!
-//! Scanning starts after the line containing "Transactions effectuées avec la
-//! carte de" and matches transaction-shaped lines:
+//! A statement is read only if it contains the line "Transactions effectuées avec la
+//! carte de"; then transaction-shaped lines are matched anywhere in the text:
 //! `DD MM DD MM [NNN] description amount[ CR]` (transaction date, posting date,
 //! optional 3-digit sequence on statements before 2021-05).
 //!
@@ -41,6 +41,9 @@ static TX_LINE_RE: LazyLock<Regex> = LazyLock::new(|| {
     )
     .unwrap()
 });
+
+/// Trailing rewards ("Remises") column some statements print before the amount, e.g. "1,00 %".
+static REWARD_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s+-?\d+,\d+\s*%$").unwrap());
 
 pub struct DesjardinsCredit;
 
@@ -103,6 +106,11 @@ fn find_statement_date(text: &str) -> Option<NaiveDate> {
     NaiveDate::from_ymd_opt(c[3].parse().ok()?, c[2].parse().ok()?, c[1].parse().ok()?)
 }
 
+/// Whether a line (after the table header) is read as a transaction. Debug aid for `examples/`.
+pub fn is_transaction_line(line: &str) -> bool {
+    TX_LINE_RE.is_match(line.trim())
+}
+
 /// Parse already-extracted statement text. `fallback_date` is used (with a
 /// warning in `errors`) when the statement date cannot be found.
 pub fn parse_text(text: &str, fallback_date: NaiveDate) -> ParsedStatement {
@@ -120,17 +128,15 @@ pub fn parse_text(text: &str, fallback_date: NaiveDate) -> ParsedStatement {
     };
     st.account_hint = ACCOUNT_RE.captures(text).map(|c| c[1].replace([' ', '-'], ""));
 
-    let mut in_table = false;
+    // `pdf-extract` emits text blocks in content-stream order, not reading order, so transaction
+    // rows can land *before* the table header line (pdfplumber, used by the legacy tool, did not do
+    // that). So the header only has to exist somewhere; transaction-shaped lines count anywhere.
+    if !text.contains(TABLE_HEADER) {
+        return st;
+    }
     for (n, line) in text.lines().enumerate() {
         let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.contains(TABLE_HEADER) {
-            in_table = true;
-            continue;
-        }
-        if !in_table {
+        if line.is_empty() || line.contains(TABLE_HEADER) {
             continue;
         }
         let Some(m) = TX_LINE_RE.captures(line) else { continue };
@@ -154,7 +160,7 @@ pub fn parse_text(text: &str, fallback_date: NaiveDate) -> ParsedStatement {
             posted_date,
             // Legacy quirk kept on purpose: an explicit "-" on a non-CR line flips to positive.
             amount: if m.name("credit").is_some() { value } else { -value },
-            description: m["desc"].trim().to_string(),
+            description: REWARD_RE.replace(m["desc"].trim(), "").trim().to_string(),
             fitid: None,
             source_seq: m.name("seq").map(|s| s.as_str().to_string()),
             balance: None,
