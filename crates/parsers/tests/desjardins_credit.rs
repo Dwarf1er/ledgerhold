@@ -118,13 +118,13 @@ fn font_widths_longer_than_last_char_is_tolerated() {
     let mut doc = Document::load_mem(&fs::read(fixtures().join("synthetic/desjardins_visa.pdf")).unwrap()).unwrap();
     let mut patched = 0;
     for obj in doc.objects.values_mut() {
-        if let Object::Dictionary(d) = obj {
-            if d.get(b"Type").and_then(Object::as_name).ok() == Some(b"Font".as_slice()) {
-                d.set("FirstChar", 0);
-                d.set("LastChar", 10);
-                d.set("Widths", Object::Array(vec![Object::Integer(500); 20]));
-                patched += 1;
-            }
+        if let Object::Dictionary(d) = obj
+            && d.get(b"Type").and_then(Object::as_name).ok() == Some(b"Font".as_slice())
+        {
+            d.set("FirstChar", 0);
+            d.set("LastChar", 10);
+            d.set("Widths", Object::Array(vec![Object::Integer(500); 20]));
+            patched += 1;
         }
     }
     assert!(patched > 0);
