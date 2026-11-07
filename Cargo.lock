@@ -2125,6 +2125,7 @@ dependencies = [
  "csv",
  "ledgerhold-core",
  "ledgerhold-ofx",
+ "lopdf",
  "pdf-extract",
  "regex",
  "serde",

@@ -26,6 +26,11 @@ static STATEMENT_DATE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?is)DATE DU RELEV[ÉE].*?Jour\D*(\d{2}).*?Mois\D*(\d{2}).*?Ann[ée]e\D*(\d{4})").unwrap()
 });
 
+/// Newer layout: the labels live in separate header cells and the value is plain
+/// "DATE DU RELEVÉ 08 06 2026" (DD MM YYYY).
+static STATEMENT_DATE_PLAIN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)DATE DU RELEV[ÉE]\s+(\d{2})\s+(\d{2})\s+(\d{4})\b").unwrap());
+
 /// Masked card number, e.g. "4540 XXXX XXXX 1234".
 static ACCOUNT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)\b(\d{4}(?:[ -]?X{4}){2}[ -]?\d{4})\b").unwrap());
@@ -39,6 +44,50 @@ static TX_LINE_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 pub struct DesjardinsCredit;
 
+/// PDF -> text. Real Desjardins statements have fonts whose `Widths` array is longer than
+/// `LastChar - FirstChar + 1`, which makes `pdf-extract` panic on an assertion. Widths only affect
+/// spacing, so make `LastChar` agree with `Widths` before extracting.
+pub fn extract_text(input: &[u8]) -> Result<String, String> {
+    use lopdf::{Document, Object};
+
+    let mut doc = Document::load_mem(input).map_err(|e| e.to_string())?;
+    if doc.is_encrypted() {
+        doc.decrypt("").map_err(|e| e.to_string())?;
+    }
+
+    // Widths may be an indirect reference, so resolve lengths first, then write.
+    let mut fixes = Vec::new();
+    for (id, obj) in &doc.objects {
+        let Object::Dictionary(d) = obj else { continue };
+        let (Ok(first), Ok(widths)) = (d.get(b"FirstChar").and_then(Object::as_i64), d.get(b"Widths")) else {
+            continue;
+        };
+        let len = match widths {
+            Object::Array(a) => a.len(),
+            Object::Reference(r) => match doc.get_object(*r) {
+                Ok(Object::Array(a)) => a.len(),
+                _ => continue,
+            },
+            _ => continue,
+        };
+        if len > 0 {
+            fixes.push((*id, first + len as i64 - 1));
+        }
+    }
+    for (id, last) in fixes {
+        if let Some(Object::Dictionary(d)) = doc.objects.get_mut(&id) {
+            d.set("LastChar", last);
+        }
+    }
+
+    let mut text = String::new();
+    {
+        let mut out = pdf_extract::PlainTextOutput::new(&mut text);
+        pdf_extract::output_doc(&doc, &mut out).map_err(|e| e.to_string())?;
+    }
+    Ok(text)
+}
+
 /// Resolve a day/month (no year) against the statement date: the latest valid
 /// date that is not after the statement date, looking at the statement year and
 /// the year before.
@@ -50,7 +99,7 @@ fn resolve_date(day: u32, month: u32, statement: NaiveDate) -> Option<NaiveDate>
 }
 
 fn find_statement_date(text: &str) -> Option<NaiveDate> {
-    let c = STATEMENT_DATE_RE.captures(text)?;
+    let c = STATEMENT_DATE_RE.captures(text).or_else(|| STATEMENT_DATE_PLAIN_RE.captures(text))?;
     NaiveDate::from_ymd_opt(c[3].parse().ok()?, c[2].parse().ok()?, c[1].parse().ok()?)
 }
 
@@ -125,9 +174,9 @@ impl StatementParser for DesjardinsCredit {
     fn parse(&self, input: &[u8]) -> Result<Vec<ParsedStatement>, ParseError> {
         // The PDF library panics on some malformed files. A statement is untrusted input, so turn
         // that into an ordinary "could not read this file" error instead of taking the app down.
-        let text = std::panic::catch_unwind(|| pdf_extract::extract_text_from_mem(input))
+        let text = std::panic::catch_unwind(|| extract_text(input))
             .map_err(|_| ParseError::Pdf("the file is not a PDF this reader understands".into()))?
-            .map_err(|e| ParseError::Pdf(e.to_string()))?;
+            .map_err(ParseError::Pdf)?;
         Ok(vec![parse_text(&text, Local::now().date_naive())])
     }
 }

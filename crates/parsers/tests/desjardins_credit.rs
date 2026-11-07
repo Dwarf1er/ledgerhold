@@ -109,3 +109,39 @@ fn feb_29_resolves_to_leap_year_instead_of_being_dropped() {
 fn non_pdf_input_is_an_error_not_a_panic() {
     assert!(by_id("desjardins-credit").unwrap().parse(b"definitely not a pdf").is_err());
 }
+
+/// Real statements carry fonts whose `Widths` is longer than `LastChar - FirstChar + 1`; the
+/// extractor used to panic on that ("not a PDF this reader understands").
+#[test]
+fn font_widths_longer_than_last_char_is_tolerated() {
+    use lopdf::{Document, Object};
+    let mut doc = Document::load_mem(&fs::read(fixtures().join("synthetic/desjardins_visa.pdf")).unwrap()).unwrap();
+    let mut patched = 0;
+    for obj in doc.objects.values_mut() {
+        if let Object::Dictionary(d) = obj {
+            if d.get(b"Type").and_then(Object::as_name).ok() == Some(b"Font".as_slice()) {
+                d.set("FirstChar", 0);
+                d.set("LastChar", 10);
+                d.set("Widths", Object::Array(vec![Object::Integer(500); 20]));
+                patched += 1;
+            }
+        }
+    }
+    assert!(patched > 0);
+    let mut bytes = Vec::new();
+    doc.save_to(&mut bytes).unwrap();
+    let sts = by_id("desjardins-credit").unwrap().parse(&bytes).unwrap();
+    check(&sts[0]);
+}
+
+#[test]
+fn statement_date_as_plain_dd_mm_yyyy() {
+    let text = "Date du Jour Mois Année\nrelevé\nDATE DU RELEVÉ 08 06 2026\n\
+        Transactions effectuées avec la carte de X\n\
+        05 06 06 06 PHARMACIE 12,50\n\
+        28 12 29 12 VIEUX ACHAT 3,00\n";
+    let st = parse_text(text, NaiveDate::from_ymd_opt(2000, 1, 1).unwrap());
+    assert!(st.errors.is_empty(), "{:?}", st.errors);
+    assert_eq!(st.transactions[0].date.to_string(), "2026-06-05");
+    assert_eq!(st.transactions[1].date.to_string(), "2025-12-28");
+}

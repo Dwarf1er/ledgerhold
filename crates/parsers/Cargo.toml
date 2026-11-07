@@ -12,6 +12,8 @@ thiserror.workspace = true
 csv = "1"
 regex = "1.13.1"
 pdf-extract = "0.12.1"
+# Same version pdf-extract uses; needed to repair the document before extraction.
+lopdf = { version = "0.42", default-features = false }
 
 [dev-dependencies]
 serde.workspace = true
