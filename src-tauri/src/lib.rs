@@ -110,15 +110,15 @@ fn export_ofx(
 }
 
 #[tauri::command(async)]
-fn add_person(state: State<'_, AppState>, name: String) -> R<PersonDto> {
+fn add_person(state: State<'_, AppState>, name: String, color: Option<String>) -> R<PersonDto> {
     let store = lock(&state)?;
-    svc::add_person(&store, &name).map_err(msg)
+    svc::add_person(&store, &name, color.as_deref()).map_err(msg)
 }
 
 #[tauri::command(async)]
-fn rename_person(state: State<'_, AppState>, id: String, name: String) -> R<PersonDto> {
+fn update_person(state: State<'_, AppState>, id: String, name: String, color: Option<String>) -> R<PersonDto> {
     let store = lock(&state)?;
-    svc::rename_person(&store, &id, &name).map_err(msg)
+    svc::update_person(&store, &id, &name, color.as_deref()).map_err(msg)
 }
 
 #[tauri::command(async)]
@@ -202,7 +202,7 @@ pub fn run() {
             delete_anchor,
             export_ofx,
             add_person,
-            rename_person,
+            update_person,
             delete_person,
             rename_account,
             delete_account,

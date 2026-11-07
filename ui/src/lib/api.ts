@@ -4,6 +4,8 @@
 export interface Person {
   id: string;
   name: string;
+  /** Avatar colour name (see lib/colors.ts). */
+  color: string;
 }
 export interface Institution {
   id: string;
@@ -141,8 +143,10 @@ export interface Api {
   setAnchor(accountId: string, date: string, amount: number, note?: string | null): Promise<void>;
   deleteAnchor(anchorId: string): Promise<void>;
   exportOfx(accountIds: string[], start: string, end: string, dir: string): Promise<ExportResult[]>;
-  addPerson(name: string): Promise<Person>;
-  renamePerson(id: string, name: string): Promise<Person>;
+  /** Without a colour, the person gets the first one nobody has. */
+  addPerson(name: string, color?: string | null): Promise<Person>;
+  /** Changes the name, and the colour when one is given. */
+  updatePerson(id: string, name: string, color?: string | null): Promise<Person>;
   /** Accounts they owned stay, without them as an owner. */
   deletePerson(id: string): Promise<void>;
   addInstitution(name: string, bankId?: string | null): Promise<Institution>;
@@ -213,8 +217,9 @@ export function backed(call: Call) {
     setAnchor: (accountId: string, date: string, amount: number, note: string | null = null) =>
       call<void>('set_anchor', { accountId, date, amount, note }),
     deleteAnchor: (anchorId: string) => call<void>('delete_anchor', { anchorId }),
-    addPerson: (name: string) => call<Person>('add_person', { name }),
-    renamePerson: (id: string, name: string) => call<Person>('rename_person', { id, name }),
+    addPerson: (name: string, color: string | null = null) => call<Person>('add_person', { name, color }),
+    updatePerson: (id: string, name: string, color: string | null = null) =>
+      call<Person>('update_person', { id, name, color }),
     deletePerson: (id: string) => call<void>('delete_person', { id }),
     addInstitution: (name: string, bankId: string | null = null) =>
       call<Institution>('add_institution', { name, bankId }),

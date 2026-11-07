@@ -21,8 +21,8 @@ struct Fx {
 
 fn fx() -> Fx {
     let mut store = Store::open_in_memory().unwrap();
-    let alex = add_person(&store, "Alex").unwrap();
-    let sam = add_person(&store, "Sam").unwrap();
+    let alex = add_person(&store, "Alex", None).unwrap();
+    let sam = add_person(&store, "Sam", None).unwrap();
     let inst = add_institution(&store, "Desjardins", Some("815")).unwrap();
     let acct = add_account(
         &mut store,
@@ -233,7 +233,7 @@ fn export_writes_one_named_file_per_account_with_balance() {
 #[test]
 fn setup_validation_and_owner_changes() {
     let mut f = fx();
-    assert!(add_person(&f.store, "   ").is_err());
+    assert!(add_person(&f.store, "   ", None).is_err());
     assert!(add_institution(&f.store, "", None).is_err());
     let inst = overview(&f.store, today()).unwrap().institutions[0].id.clone();
     let bad = add_account(

@@ -54,6 +54,10 @@ fn household() -> T {
 #[test]
 fn rename_and_delete_people_and_accounts() {
     let mut t = household();
+    assert!(t.ok("person list").contains("Alex  color=blue"));
+    t.ok("person color Sam teal");
+    assert!(t.ok("person list").contains("Sam  color=teal"));
+    assert!(t.try_run("person color Sam mauve").0.is_err());
     t.ok("person rename Alex Alexandre");
     assert!(t.ok("person list").contains("Alexandre"));
     t.ok("account rename Joint Household");

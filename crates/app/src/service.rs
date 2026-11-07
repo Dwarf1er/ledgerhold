@@ -49,7 +49,7 @@ pub fn overview(store: &Store, today: NaiveDate) -> Result<Overview> {
         .map(|a| summary(store, a, &names, today))
         .collect::<Result<Vec<_>>>()?;
     Ok(Overview {
-        people: store.list_people()?.into_iter().map(|p| PersonDto { id: p.id, name: p.name }).collect(),
+        people: store.list_people()?.into_iter().map(|p| PersonDto { id: p.id, name: p.name, color: p.color }).collect(),
         institutions: store
             .list_institutions()?
             .into_iter()
@@ -299,21 +299,24 @@ pub fn export_ofx(
 
 // ---- setup ----------------------------------------------------------------------
 
-pub fn add_person(store: &Store, name: &str) -> Result<PersonDto> {
+pub fn add_person(store: &Store, name: &str, color: Option<&str>) -> Result<PersonDto> {
     let name = name.trim();
     if name.is_empty() {
         bail!("name is required");
     }
-    Ok(PersonDto { id: store.add_person(name)?, name: name.into() })
+    let id = store.add_person(name, color)?;
+    let p = store.list_people()?.into_iter().find(|p| p.id == id).context("person vanished")?;
+    Ok(PersonDto { id, name: p.name, color: p.color })
 }
 
-pub fn rename_person(store: &Store, id: &str, name: &str) -> Result<PersonDto> {
+pub fn update_person(store: &Store, id: &str, name: &str, color: Option<&str>) -> Result<PersonDto> {
     let name = name.trim();
     if name.is_empty() {
         bail!("name is required");
     }
-    store.rename_person(id, name)?;
-    Ok(PersonDto { id: id.into(), name: name.into() })
+    store.update_person(id, name, color)?;
+    let p = store.list_people()?.into_iter().find(|p| p.id == id).context("person vanished")?;
+    Ok(PersonDto { id: p.id, name: p.name, color: p.color })
 }
 
 pub fn delete_person(store: &Store, id: &str) -> Result<()> {

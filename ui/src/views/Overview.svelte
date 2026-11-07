@@ -49,7 +49,7 @@
       <Segmented label="Show accounts for" items={filterItems} bind:value={app.person} />
     {/if}
     {#if ov.accounts.length}
-      <Button variant="primary" href={links.import()}><Icon name="upload" size={14} /> Import</Button>
+      <Button variant="primary" href={links.import()}><Icon name="download" size={14} /> Import</Button>
     {/if}
   {/snippet}
 </PageHeader>
@@ -98,7 +98,7 @@
           </span>
         </span>
         <span class="owners" aria-label="Owners">
-          {#each ownersOf(s.account.ownerIds) as p (p.id)}<Avatar name={p.name} />{/each}
+          {#each ownersOf(s.account.ownerIds) as p (p.id)}<Avatar name={p.name} color={p.color} />{/each}
         </span>
         <span class="activity muted">
           {#if s.txnCount}

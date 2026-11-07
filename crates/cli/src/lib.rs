@@ -60,10 +60,17 @@ pub enum Command {
 
 #[derive(Subcommand, Debug)]
 pub enum PersonCmd {
-    Add { name: String },
+    Add {
+        name: String,
+        /// Avatar colour: blue, green, orange, red, purple, pink, teal or slate (default: the first one not in use)
+        #[arg(long)]
+        color: Option<String>,
+    },
     List,
     /// Change a person's name
     Rename { person: String, name: String },
+    /// Change a person's avatar colour
+    Color { person: String, color: String },
     /// Remove a person (their accounts stay, without them as an owner)
     Delete { person: String },
 }
@@ -246,8 +253,8 @@ fn money_col(m: Money) -> String {
 
 pub fn run(cli: &Cli, store: &mut Store, out: &mut impl Write, now: NaiveDateTime) -> Result<()> {
     match &cli.command {
-        Command::Person(PersonCmd::Add { name }) => {
-            let id = store.add_person(name)?;
+        Command::Person(PersonCmd::Add { name, color }) => {
+            let id = store.add_person(name, color.as_deref())?;
             writeln!(out, "added person {name} ({id})")?;
         }
         Command::Person(PersonCmd::Rename { person, name }) => {
@@ -256,8 +263,14 @@ pub fn run(cli: &Cli, store: &mut Store, out: &mut impl Write, now: NaiveDateTim
             if name.is_empty() {
                 bail!("name is required");
             }
-            store.rename_person(&id, name)?;
+            store.update_person(&id, name, None)?;
             writeln!(out, "renamed {person} to {name}")?;
+        }
+        Command::Person(PersonCmd::Color { person, color }) => {
+            let id = resolve_person(store, person)?;
+            let p = store.list_people()?.into_iter().find(|p| p.id == id).context("person vanished")?;
+            store.update_person(&id, &p.name, Some(color))?;
+            writeln!(out, "{} is now {color}", p.name)?;
         }
         Command::Person(PersonCmd::Delete { person }) => {
             let id = resolve_person(store, person)?;
@@ -266,7 +279,7 @@ pub fn run(cli: &Cli, store: &mut Store, out: &mut impl Write, now: NaiveDateTim
         }
         Command::Person(PersonCmd::List) => {
             for p in store.list_people()? {
-                writeln!(out, "{}  {}", p.id, p.name)?;
+                writeln!(out, "{}  {}  color={}", p.id, p.name, p.color)?;
             }
         }
         Command::Institution(InstitutionCmd::Add { name, bank_id }) => {

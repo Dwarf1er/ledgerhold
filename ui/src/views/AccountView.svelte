@@ -1,7 +1,8 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import type { AccountDetail, BalancePoint, Batch, Discrepancy, Txn } from '../lib/api';
+  import type { AccountDetail, Anchor, BalancePoint, Batch, Discrepancy, Txn } from '../lib/api';
   import Alert from '../components/Alert.svelte';
+  import AnchorEditDialog from '../components/AnchorEditDialog.svelte';
   import AnchorForm from '../components/AnchorForm.svelte';
   import Avatar from '../components/Avatar.svelte';
   import BalanceChart from '../components/BalanceChart.svelte';
@@ -49,6 +50,8 @@
   let undoOpen = $state(false);
   let deleteAnchorId = $state<string | null>(null);
   let deleteOpen = $state(false);
+  let editAnchor = $state<Anchor | null>(null);
+  let editAnchorOpen = $state(false);
 
   const summary = $derived(detail?.summary);
   const acct = $derived(summary?.account);
@@ -171,13 +174,13 @@
     {#snippet subtitle()}
       <span>{[acct.institutionName, kindLabel(acct.kind), maskNumber(acct.number)].filter(Boolean).join(' · ')}</span>
       {#if owners.length}
-        <span class="owners">{#each owners as p (p.id)}<Avatar name={p.name} size={20} />{/each}</span>
+        <span class="owners">{#each owners as p (p.id)}<Avatar name={p.name} color={p.color} size={20} />{/each}</span>
         <span>{owners.map((p) => p.name).join(' & ')}</span>
       {/if}
     {/snippet}
     {#snippet actions()}
-      <Button onclick={() => (exportOpen = true)}><Icon name="download" size={14} /> Export OFX</Button>
-      <Button variant="primary" href={links.import(acct.id)}><Icon name="upload" size={14} /> Import</Button>
+      <Button onclick={() => (exportOpen = true)}><Icon name="upload" size={14} /> Export OFX</Button>
+      <Button variant="primary" href={links.import(acct.id)}><Icon name="download" size={14} /> Import</Button>
     {/snippet}
   </PageHeader>
 
@@ -325,6 +328,9 @@
                   <td class="num"><Money minor={a.amount} currency={cur} /></td>
                   <td class="muted">{a.note ?? ''}</td>
                   <td class="act">
+                    <Button variant="ghost" size="sm" aria-label="Edit balance for {a.date}" onclick={() => { editAnchor = a; editAnchorOpen = true; }}>
+                      <Icon name="pencil" size={14} />
+                    </Button>
                     <Button variant="ghost" size="sm" aria-label="Remove balance for {a.date}" onclick={() => { deleteAnchorId = a.id; deleteOpen = true; }}>
                       <Icon name="trash" size={14} />
                     </Button>
@@ -382,6 +388,8 @@
     This removes the {undoBatch?.rowsNew ?? 0} transaction{undoBatch?.rowsNew === 1 ? '' : 's'} added from
     <strong>{undoBatch?.filename}</strong>. You can import the file again later.
   </ConfirmDialog>
+
+  <AnchorEditDialog bind:open={editAnchorOpen} accountId={id} currency={cur} anchor={editAnchor} all={detail.anchors} />
 
   <ConfirmDialog bind:open={deleteOpen} title="Remove this known balance?" confirmLabel="Remove" danger onconfirm={doDeleteAnchor}>
     Balances for this account will be calculated from the remaining known balances.
@@ -500,6 +508,7 @@
   }
   .act {
     width: 1%;
+    white-space: nowrap;
     text-align: right;
   }
   .small {

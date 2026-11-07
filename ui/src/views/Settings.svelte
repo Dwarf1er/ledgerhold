@@ -6,10 +6,12 @@
   import Alert from '../components/Alert.svelte';
   import Avatar from '../components/Avatar.svelte';
   import Button from '../components/Button.svelte';
+  import ColorPicker from '../components/ColorPicker.svelte';
   import ConfirmDialog from '../components/ConfirmDialog.svelte';
   import Dialog from '../components/Dialog.svelte';
   import Icon from '../components/Icon.svelte';
   import PageHeader from '../components/PageHeader.svelte';
+  import { nextFreeColor } from '../lib/colors';
   import { kindLabel, maskNumber } from '../lib/format';
   import { links } from '../lib/router.svelte';
   import { app, errMsg, refresh, session, toast } from '../lib/state.svelte';
@@ -17,6 +19,9 @@
   const ov = $derived(app.overview!);
 
   let personName = $state('');
+  // Empty until the user picks one; until then the swatch shows (and the server would give) the first free colour.
+  let personColor = $state('');
+  const chosenColor = $derived(personColor || nextFreeColor(ov.people));
   let bankName = $state('');
   let bankId = $state('');
   let busy = $state<string | null>(null);
@@ -29,7 +34,8 @@
 
   // Rename (people and accounts share one dialog) and delete.
   let renameOpen = $state(false);
-  let renameTarget = $state<{ kind: 'person' | 'account'; id: string; current: string } | null>(null);
+  let renameTarget = $state<{ kind: 'person' | 'account'; id: string; current: string; color?: string } | null>(null);
+  let renameColor = $state('');
   let renameValue = $state('');
   let renameBusy = $state(false);
   let renameError = $state<string | null>(null);
@@ -85,9 +91,10 @@
     busy = 'person';
     formError = null;
     try {
-      await api.addPerson(personName);
+      await api.addPerson(personName, chosenColor);
       toast(`Added ${personName.trim()}`, 'success');
       personName = '';
+      personColor = '';
       await refresh();
     } catch (err) {
       formError = errMsg(err);
@@ -114,9 +121,10 @@
     }
   }
 
-  function startRename(kind: 'person' | 'account', id: string, current: string) {
-    renameTarget = { kind, id, current };
+  function startRename(kind: 'person' | 'account', id: string, current: string, color?: string) {
+    renameTarget = { kind, id, current, color };
     renameValue = current;
+    renameColor = color ?? '';
     renameError = null;
     renameOpen = true;
   }
@@ -125,17 +133,17 @@
     const t = renameTarget;
     const name = renameValue.trim();
     if (!t || !name) return;
-    if (name === t.current) {
+    if (name === t.current && renameColor === (t.color ?? '')) {
       renameOpen = false;
       return;
     }
     renameBusy = true;
     renameError = null;
     try {
-      if (t.kind === 'person') await api.renamePerson(t.id, name);
+      if (t.kind === 'person') await api.updatePerson(t.id, name, renameColor || null);
       else await api.renameAccount(t.id, name);
       await refresh();
-      toast(`Renamed to ${name}`, 'success');
+      toast(t.kind === 'person' ? `Saved ${name}` : `Renamed to ${name}`, 'success');
       renameOpen = false;
     } catch (err) {
       renameError = errMsg(err);
@@ -232,9 +240,9 @@
   <div class="card">
     {#each ov.people as p (p.id)}
       <div class="line">
-        <Avatar name={p.name} size={24} /> <span>{p.name}</span>
+        <Avatar name={p.name} color={p.color} size={24} /> <span>{p.name}</span>
         <span class="push actions">
-          <Button variant="ghost" size="sm" aria-label={`Rename ${p.name}`} onclick={() => startRename('person', p.id, p.name)}>Rename</Button>
+          <Button variant="ghost" size="sm" aria-label={`Edit ${p.name}`} onclick={() => startRename('person', p.id, p.name, p.color)}>Edit</Button>
           <Button variant="ghost" size="sm" aria-label={`Remove ${p.name}`} onclick={() => { personToDelete = p; deletePersonOpen = true; }}>Remove</Button>
         </span>
       </div>
@@ -243,6 +251,7 @@
     {/each}
     <form class="add" onsubmit={addPerson}>
       <input class="input" placeholder="Add a person" aria-label="Person name" bind:value={personName} autocomplete="off" />
+      <ColorPicker label="Avatar colour" size={20} value={chosenColor} onchange={(c) => (personColor = c)} />
       <Button type="submit" size="sm" loading={busy === 'person'} disabled={!personName.trim()}><Icon name="plus" size={14} /> Add</Button>
     </form>
   </div>
@@ -292,7 +301,7 @@
         <a class="nm" href={links.account(s.account.id)}>{s.account.name}</a>
         <span class="muted">{[s.account.institutionName, kindLabel(s.account.kind), s.account.currency, maskNumber(s.account.number)].filter(Boolean).join(' · ')}</span>
         <span class="push owners">
-          {#each ownersOf(s.account.ownerIds) as p (p.id)}<Avatar name={p.name} size={20} />{/each}
+          {#each ownersOf(s.account.ownerIds) as p (p.id)}<Avatar name={p.name} color={p.color} size={20} />{/each}
           <Button variant="ghost" size="sm" onclick={() => editOwners(s)}>Owners</Button>
           <Button variant="ghost" size="sm" aria-label={`Rename ${s.account.name}`} onclick={() => startRename('account', s.account.id, s.account.name)}>Rename</Button>
           <Button variant="ghost" size="sm" aria-label={`Delete ${s.account.name}`} onclick={() => { accountToDelete = s; deleteAccountOpen = true; }}>Delete</Button>
@@ -342,7 +351,7 @@
           checked={ownerPick.includes(p.id)}
           onchange={() => (ownerPick = ownerPick.includes(p.id) ? ownerPick.filter((x) => x !== p.id) : [...ownerPick, p.id])}
         />
-        <Avatar name={p.name} size={20} /> {p.name}
+        <Avatar name={p.name} color={p.color} size={20} /> {p.name}
       </label>
     {/each}
   </div>
@@ -352,12 +361,18 @@
   {/snippet}
 </Dialog>
 
-<Dialog bind:open={renameOpen} title={renameTarget?.kind === 'account' ? 'Rename account' : 'Rename person'} description={renameTarget?.current} width={400}>
+<Dialog bind:open={renameOpen} title={renameTarget?.kind === 'account' ? 'Rename account' : 'Edit person'} description={renameTarget?.current} width={400}>
   <form onsubmit={(e) => { e.preventDefault(); saveRename(); }}>
     <div class="field">
       <label for="rename-name">Name</label>
       <input id="rename-name" class="input" bind:value={renameValue} autocomplete="off" data-autofocus />
     </div>
+    {#if renameTarget?.kind === 'person'}
+      <div class="field colour">
+        <span class="label">Avatar colour</span>
+        <ColorPicker label="Avatar colour" bind:value={renameColor} />
+      </div>
+    {/if}
     {#if renameError}<div class="gap"></div><Alert tone="error">{renameError}</Alert>{/if}
     <button type="submit" hidden aria-hidden="true" tabindex="-1"></button>
   </form>
@@ -442,6 +457,9 @@
   .pwform {
     display: grid;
     gap: 12px;
+  }
+  .colour {
+    margin-top: 12px;
   }
   section {
     margin-bottom: 36px;

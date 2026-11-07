@@ -108,3 +108,9 @@ export function maskNumber(n: string | null | undefined): string {
   const tail = n.replace(/[^A-Za-z0-9]/g, '').slice(-4);
   return `•••• ${tail}`;
 }
+
+/** Integer minor units as an editable decimal string ("12853.55", "-40.00"). */
+export function plainAmount(minor: number): string {
+  const abs = Math.abs(minor);
+  return `${minor < 0 ? '-' : ''}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`;
+}

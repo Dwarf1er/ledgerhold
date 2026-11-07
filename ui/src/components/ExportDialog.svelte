@@ -212,7 +212,7 @@
     {:else}
       {#if invalid}<span class="why muted">{invalid}</span>{/if}
       <Button variant="ghost" onclick={() => (open = false)}>Cancel</Button>
-      <Button variant="primary" loading={busy} disabled={!!invalid} onclick={run}><Icon name="download" size={14} /> Export</Button>
+      <Button variant="primary" loading={busy} disabled={!!invalid} onclick={run}><Icon name="upload" size={14} /> Export</Button>
     {/if}
   {/snippet}
 </Dialog>

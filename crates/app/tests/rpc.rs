@@ -97,9 +97,9 @@ fn every_advertised_command_is_handled() {
 fn rename_and_delete_over_json() {
     let mut s = Store::open_in_memory().unwrap();
     let alex = ok(&mut s, "add_person", json!({"name": "Alx"}));
-    let r = ok(&mut s, "rename_person", json!({"id": alex["id"], "name": "  Alex "}));
+    let r = ok(&mut s, "update_person", json!({"id": alex["id"], "name": "  Alex "}));
     assert_eq!(r["name"], "Alex");
-    assert!(run(&mut s, "rename_person", json!({"id": alex["id"], "name": "  "})).is_err());
+    assert!(run(&mut s, "update_person", json!({"id": alex["id"], "name": "  "})).is_err());
     let inst = ok(&mut s, "add_institution", json!({"name": "Desjardins"}));
     let acct = ok(
         &mut s,
@@ -136,4 +136,20 @@ fn edit_and_delete_bank_over_json() {
     ok(&mut s, "delete_account", json!({"id": acct}));
     ok(&mut s, "delete_institution", json!({"id": inst["id"]}));
     assert_eq!(ok(&mut s, "overview", json!({}))["institutions"], json!([]));
+}
+
+#[test]
+fn people_have_colours_over_json() {
+    let mut s = Store::open_in_memory().unwrap();
+    let a = ok(&mut s, "add_person", json!({"name": "Antoine"}));
+    let b = ok(&mut s, "add_person", json!({"name": "Arabel", "color": "purple"}));
+    assert_eq!((a["color"].as_str(), b["color"].as_str()), (Some("blue"), Some("purple")));
+    let u = ok(&mut s, "update_person", json!({"id": b["id"], "name": "Arabel", "color": "teal"}));
+    assert_eq!(u["color"], "teal");
+    let kept = ok(&mut s, "update_person", json!({"id": b["id"], "name": "Arabel P"}));
+    assert_eq!((kept["name"].as_str(), kept["color"].as_str()), (Some("Arabel P"), Some("teal")));
+    assert!(run(&mut s, "add_person", json!({"name": "Z", "color": "mauve"})).is_err());
+    let ov = ok(&mut s, "overview", json!({}));
+    let colours: Vec<_> = ov["people"].as_array().unwrap().iter().map(|p| p["color"].as_str().unwrap()).collect();
+    assert_eq!(colours, vec!["blue", "teal"]);
 }

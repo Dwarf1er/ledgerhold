@@ -53,7 +53,7 @@ pub const COMMANDS: &[&str] = &[
     "set_anchor",
     "delete_anchor",
     "add_person",
-    "rename_person",
+    "update_person",
     "delete_person",
     "add_institution",
     "update_institution",
@@ -120,8 +120,15 @@ struct AnchorId {
     anchor_id: String,
 }
 #[derive(Deserialize)]
-struct Name {
+struct NewPerson {
     name: String,
+    color: Option<String>,
+}
+#[derive(Deserialize)]
+struct UpdatePerson {
+    id: String,
+    name: String,
+    color: Option<String>,
 }
 #[derive(Deserialize)]
 struct PersonId {
@@ -196,12 +203,12 @@ pub fn call(store: &mut Store, command: &str, a: Value, ctx: &RpcContext<'_>) ->
             out(svc::delete_anchor(store, &a.anchor_id))
         }
         "add_person" => {
-            let a: Name = args(a)?;
-            out(svc::add_person(store, &a.name))
+            let a: NewPerson = args(a)?;
+            out(svc::add_person(store, &a.name, a.color.as_deref()))
         }
-        "rename_person" => {
-            let a: Rename = args(a)?;
-            out(svc::rename_person(store, &a.id, &a.name))
+        "update_person" => {
+            let a: UpdatePerson = args(a)?;
+            out(svc::update_person(store, &a.id, &a.name, a.color.as_deref()))
         }
         "delete_person" => {
             let a: PersonId = args(a)?;

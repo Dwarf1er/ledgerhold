@@ -8,6 +8,8 @@ use serde::Serialize;
 pub struct PersonDto {
     pub id: String,
     pub name: String,
+    /// Avatar colour name, one of `ledgerhold_store::PERSON_COLORS`.
+    pub color: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

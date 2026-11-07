@@ -3,10 +3,22 @@ use chrono::NaiveDate;
 use ledgerhold_core::{AccountKind, Money};
 use rusqlite::{OptionalExtension, params};
 
+/// Avatar colours a person can have. The UI maps each name to a shade.
+pub const PERSON_COLORS: [&str; 8] = ["blue", "green", "orange", "red", "purple", "pink", "teal", "slate"];
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Person {
     pub id: String,
     pub name: String,
+    pub color: String,
+}
+
+fn check_color(color: &str) -> Result<()> {
+    if PERSON_COLORS.contains(&color) {
+        Ok(())
+    } else {
+        Err(StoreError::Invalid(format!("unknown colour {color:?} (choose one of: {})", PERSON_COLORS.join(", "))))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,22 +71,39 @@ pub(crate) fn kind_from_str(s: &str) -> Result<AccountKind> {
 }
 
 impl Store {
-    pub fn add_person(&self, name: &str) -> Result<String> {
+    /// Add a person. Without a colour, they get the first one nobody else has yet.
+    pub fn add_person(&self, name: &str, color: Option<&str>) -> Result<String> {
+        let color = match color {
+            Some(c) => {
+                check_color(c)?;
+                c.to_string()
+            }
+            None => {
+                let used: Vec<String> = self.list_people()?.into_iter().map(|p| p.color).collect();
+                let free = PERSON_COLORS.iter().find(|c| !used.iter().any(|u| u == *c));
+                free.unwrap_or(&PERSON_COLORS[used.len() % PERSON_COLORS.len()]).to_string()
+            }
+        };
         let id = new_id();
-        self.conn.execute("INSERT INTO person(id, name) VALUES (?1, ?2)", params![id, name])?;
+        self.conn.execute("INSERT INTO person(id, name, color) VALUES (?1, ?2, ?3)", params![id, name, color])?;
         Ok(id)
     }
 
     pub fn list_people(&self) -> Result<Vec<Person>> {
-        let mut st = self.conn.prepare("SELECT id, name FROM person ORDER BY name, id")?;
-        let rows = st.query_map([], |r| Ok(Person { id: r.get(0)?, name: r.get(1)? }))?;
+        let mut st = self.conn.prepare("SELECT id, name, COALESCE(color, 'slate') FROM person ORDER BY name, id")?;
+        let rows = st.query_map([], |r| Ok(Person { id: r.get(0)?, name: r.get(1)?, color: r.get(2)? }))?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
-    pub fn rename_person(&self, id: &str, name: &str) -> Result<()> {
+    /// Change a person's name and, if given, their colour.
+    pub fn update_person(&self, id: &str, name: &str, color: Option<&str>) -> Result<()> {
+        if let Some(c) = color {
+            check_color(c)?;
+        }
         let n = self.conn.execute(
-            "UPDATE person SET name = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1",
-            params![id, name],
+            "UPDATE person SET name = ?2, color = COALESCE(?3, color),
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1",
+            params![id, name, color],
         )?;
         if n == 0 {
             return Err(StoreError::NotFound(format!("person {id}")));

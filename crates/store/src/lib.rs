@@ -7,7 +7,7 @@ mod export;
 mod import;
 mod schema;
 
-pub use accounts::{Account, Anchor, Institution, NewAccount, Person};
+pub use accounts::{Account, Anchor, Institution, NewAccount, PERSON_COLORS, Person};
 pub use balances::{BalanceReport, Discrepancy, PointKind};
 pub use import::{AccountStats, BatchInfo, ImportMeta, ImportOutcome, ImportPreview, StoredTxn};
 
@@ -81,6 +81,8 @@ pub enum StoreError {
     KindMismatch { account: String, statement: String },
     #[error("{0}")]
     InUse(String),
+    #[error("{0}")]
+    Invalid(String),
     #[error("account has no balance anchor; set a starting balance first")]
     NoAnchor,
     #[error("invalid data in database: {0}")]

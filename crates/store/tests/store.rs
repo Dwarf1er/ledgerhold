@@ -61,8 +61,8 @@ fn fixture(rel: &str) -> Vec<u8> {
 #[test]
 fn joint_account_has_several_owners_and_a_person_can_own_several_accounts() {
     let mut f = fx();
-    let a = f.store.add_person("Alex").unwrap();
-    let b = f.store.add_person("Sam").unwrap();
+    let a = f.store.add_person("Alex", None).unwrap();
+    let b = f.store.add_person("Sam", None).unwrap();
     f.store.set_owners(&f.acct, &[a.clone(), b.clone()]).unwrap();
     let second = f
         .store
@@ -87,20 +87,45 @@ fn joint_account_has_several_owners_and_a_person_can_own_several_accounts() {
 #[test]
 fn people_and_accounts_can_be_renamed() {
     let f = fx();
-    let a = f.store.add_person("Alx").unwrap();
-    f.store.rename_person(&a, "Alex").unwrap();
+    let a = f.store.add_person("Alx", None).unwrap();
+    f.store.update_person(&a, "Alex", None).unwrap();
     assert_eq!(f.store.list_people().unwrap()[0].name, "Alex");
     f.store.rename_account(&f.acct, "Joint").unwrap();
     assert_eq!(f.store.get_account(&f.acct).unwrap().name, "Joint");
-    assert!(matches!(f.store.rename_person("nope", "x"), Err(StoreError::NotFound(_))));
+    assert!(matches!(f.store.update_person("nope", "x", None), Err(StoreError::NotFound(_))));
     assert!(matches!(f.store.rename_account("nope", "x"), Err(StoreError::NotFound(_))));
+}
+
+#[test]
+fn people_get_distinct_colours_that_can_be_chosen_and_changed() {
+    let f = fx();
+    let a = f.store.add_person("Antoine", None).unwrap();
+    let b = f.store.add_person("Arabel", None).unwrap();
+    let colour = |id: &str| f.store.list_people().unwrap().into_iter().find(|p| p.id == id).unwrap().color;
+    assert_eq!((colour(&a).as_str(), colour(&b).as_str()), ("blue", "green"));
+
+    // A chosen colour sticks; the next automatic one skips colours already taken.
+    let c = f.store.add_person("Jo", Some("blue")).unwrap();
+    assert_eq!(colour(&c), "blue");
+    let d = f.store.add_person("Kay", None).unwrap();
+    assert_eq!(colour(&d), "orange");
+
+    // Renaming keeps the colour unless a new one is given.
+    f.store.update_person(&a, "Antoine P", None).unwrap();
+    assert_eq!(colour(&a), "blue");
+    f.store.update_person(&a, "Antoine P", Some("pink")).unwrap();
+    assert_eq!(colour(&a), "pink");
+
+    assert!(matches!(f.store.add_person("X", Some("chartreuse")), Err(StoreError::Invalid(_))));
+    assert!(matches!(f.store.update_person(&a, "Antoine", Some("nope")), Err(StoreError::Invalid(_))));
+    assert_eq!(colour(&a), "pink");
 }
 
 #[test]
 fn deleting_a_person_keeps_their_accounts_and_the_other_owner() {
     let mut f = fx();
-    let a = f.store.add_person("Alex").unwrap();
-    let b = f.store.add_person("Sam").unwrap();
+    let a = f.store.add_person("Alex", None).unwrap();
+    let b = f.store.add_person("Sam", None).unwrap();
     f.store.set_owners(&f.acct, &[a.clone(), b.clone()]).unwrap();
     f.store.delete_person(&a).unwrap();
     assert_eq!(f.store.get_account(&f.acct).unwrap().owners, vec![b]);
@@ -386,12 +411,43 @@ fn file_database_persists_and_migrations_are_idempotent() {
     let id;
     {
         let s = Store::open(&path).unwrap();
-        assert_eq!(s.schema_version().unwrap(), 1);
-        id = s.add_person("Alex").unwrap();
+        assert_eq!(s.schema_version().unwrap(), 2);
+        id = s.add_person("Alex", None).unwrap();
     }
     let s = Store::open(&path).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 1);
+    assert_eq!(s.schema_version().unwrap(), 2);
     assert_eq!(s.list_people().unwrap()[0].id, id);
+    drop(s);
+    for ext in ["", "-wal", "-shm"] {
+        let _ = fs::remove_file(format!("{}{ext}", path.display()));
+    }
+}
+
+#[test]
+fn upgrading_an_existing_database_gives_each_person_a_distinct_colour() {
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("upgrade-{}.sqlite", std::process::id()));
+    for ext in ["", "-wal", "-shm"] {
+        let _ = fs::remove_file(format!("{}{ext}", path.display()));
+    }
+    {
+        // A database as version 1 left it: no colour column.
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(include_str!("../migrations/0001_initial.sql")).unwrap();
+        for (id, name) in [("p1", "Antoine"), ("p2", "Arabel"), ("p3", "Sam")] {
+            conn.execute("INSERT INTO person(id, name) VALUES (?1, ?2)", [id, name]).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 1).unwrap();
+    }
+    let s = Store::open(&path).unwrap();
+    assert_eq!(s.schema_version().unwrap(), 2);
+    let by_name: Vec<_> = s.list_people().unwrap().into_iter().map(|p| (p.name, p.color)).collect();
+    assert_eq!(
+        by_name,
+        vec![("Antoine".into(), "blue".into()), ("Arabel".into(), "green".into()), ("Sam".into(), "orange".into())]
+    );
+    // And the next person added gets a colour nobody has.
+    let id = s.add_person("Jo", None).unwrap();
+    assert_eq!(s.list_people().unwrap().into_iter().find(|p| p.id == id).unwrap().color, "red");
     drop(s);
     for ext in ["", "-wal", "-shm"] {
         let _ = fs::remove_file(format!("{}{ext}", path.display()));
@@ -418,7 +474,7 @@ mod file_permissions {
         let db = root.join("a/b/ledgerhold.sqlite");
         let store = Store::open(&db).unwrap();
         // Writing makes SQLite create its -wal and -shm files; they must be private too.
-        store.add_person("Alex").unwrap();
+        store.add_person("Alex", None).unwrap();
         assert_eq!(mode(&db), 0o600);
         for side in ["-wal", "-shm"] {
             let p = PathBuf::from(format!("{}{side}", db.display()));

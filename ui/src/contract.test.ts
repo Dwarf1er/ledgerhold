@@ -1,7 +1,7 @@
 // The JS <-> Rust command boundary can't be exercised without a real window, so guard the
 // part that breaks silently: every command the UI invokes must be registered in Rust, and
 // every registered command should be used by the UI.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -42,6 +42,15 @@ describe('web server contract', () => {
   it('the zip download name matches on both sides', () => {
     expect(apiSrc + readFileSync(join(process.cwd(), 'src/components/ExportDialog.svelte'), 'utf8')).toContain('all.zip');
     expect(readFileSync(join(process.cwd(), '../crates/server/src/files.rs'), 'utf8')).toContain('"all.zip"');
+  });
+});
+
+describe('web page', () => {
+  it('declares favicons and ships every file it points at', () => {
+    const html = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
+    const hrefs = [...html.matchAll(/<link rel="(?:icon|apple-touch-icon)"[^>]*href="\/([^"]+)"/g)].map((m) => m[1]);
+    expect(hrefs).toEqual(['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png']);
+    for (const f of hrefs) expect(existsSync(join(process.cwd(), 'public', f)), f).toBe(true);
   });
 });
 

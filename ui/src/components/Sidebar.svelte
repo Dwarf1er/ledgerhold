@@ -1,15 +1,41 @@
 <script lang="ts">
   import { api } from '../lib/api';
+  import type { AccountSummary } from '../lib/api';
+  import { kindLabel, maskNumber } from '../lib/format';
+  import Avatar from './Avatar.svelte';
   import { app, markSignedOut, session, setTheme, theme } from '../lib/state.svelte';
   import { links, router } from '../lib/router.svelte';
   import Icon from './Icon.svelte';
   import Segmented from './Segmented.svelte';
 
   const route = $derived(router.route);
-  const accounts = $derived(
-    [...(app.overview?.accounts ?? [])].sort((a, b) => a.account.name.localeCompare(b.account.name)),
-  );
+  // Accounts grouped under their bank, banks and accounts both alphabetical.
+  const groups = $derived.by(() => {
+    const byBank = new Map<string, { id: string; name: string; accounts: AccountSummary[] }>();
+    for (const s of app.overview?.accounts ?? []) {
+      const g = byBank.get(s.account.institutionId) ?? { id: s.account.institutionId, name: s.account.institutionName, accounts: [] };
+      g.accounts.push(s);
+      byBank.set(s.account.institutionId, g);
+    }
+    return [...byBank.values()]
+      .map((g) => ({ ...g, accounts: g.accounts.sort((a, b) => a.account.name.localeCompare(b.account.name)) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
   let mode = $state(theme.mode);
+
+  const people = $derived(app.overview?.people ?? []);
+  const ownersOf = (s: AccountSummary) => s.account.ownerIds.map((id) => people.find((p) => p.id === id)).filter((p) => !!p);
+
+  /** Everything that tells accounts apart, so a short name is enough in the row. */
+  function describe(s: AccountSummary): string {
+    const a = s.account;
+    const owners = ownersOf(s).map((p) => p.name);
+    return [
+      a.name,
+      [a.institutionName, kindLabel(a.kind), a.currency, maskNumber(a.number)].filter(Boolean).join(' · '),
+      owners.length ? `Owner${owners.length > 1 ? 's' : ''}: ${owners.join(', ')}` : 'No owner',
+    ].join('\n');
+  }
 
   async function signOut() {
     try {
@@ -28,25 +54,26 @@
 
   <nav aria-label="Main">
     <a href={links.overview()} class:active={route.name === 'overview'}><Icon name="home" /> Overview</a>
-    <a href={links.import()} class:active={route.name === 'import'}><Icon name="upload" /> Import</a>
+    <a href={links.import()} class:active={route.name === 'import'}><Icon name="download" /> Import</a>
     <a href={links.settings()} class:active={route.name === 'settings'}><Icon name="sliders" /> Settings</a>
   </nav>
 
-  {#if accounts.length}
-    <div class="section">Accounts</div>
-    <nav class="accounts" aria-label="Accounts">
-      {#each accounts as s (s.account.id)}
+  {#each groups as g, i (g.id)}
+    <div class="section" class:first={i === 0}>{i === 0 ? 'Accounts · ' : ''}{g.name}</div>
+    <nav class="accounts" aria-label={`${g.name} accounts`}>
+      {#each g.accounts as s (s.account.id)}
         <a
           href={links.account(s.account.id)}
           class:active={route.name === 'account' && route.id === s.account.id}
-          title={s.account.name}
+          title={describe(s)}
         >
           <Icon name={s.account.kind === 'credit_card' ? 'card' : 'bank'} size={14} />
           <span class="name">{s.account.name}</span>
+          <span class="owners">{#each ownersOf(s) as p (p.id)}<Avatar name={p.name} color={p.color} size={16} />{/each}</span>
         </a>
       {/each}
     </nav>
-  {/if}
+  {/each}
 
   <div class="foot">
     {#if session.authRequired}
@@ -131,17 +158,33 @@
     color: var(--fg);
   }
   .section {
-    margin: 20px 8px 6px;
+    margin: 14px 8px 4px;
     font-size: 12px;
     font-weight: 500;
     color: var(--fg-4);
+  }
+  .section.first {
+    margin-top: 20px;
   }
   .accounts a {
     height: 30px;
     font-weight: 400;
     font-size: 13px;
   }
+  .accounts a :global(svg) {
+    flex: none;
+  }
+  .owners {
+    display: flex;
+    flex: none;
+    margin-left: auto;
+    padding-left: 6px;
+  }
+  .owners :global(.avatar + .avatar) {
+    margin-left: -4px;
+  }
   .name {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

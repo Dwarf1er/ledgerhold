@@ -75,6 +75,50 @@ describe('account view', () => {
     expect(main().getByText(/higher than reported/)).toBeTruthy();
   });
 
+  it('edits a known balance in place, including its date', async () => {
+    go('#/account/a-usd?tab=balance');
+    render(App);
+    await main().findByText('Starting balance');
+    await fireEvent.input(main().getByLabelText(/Balance at end of that day/), { target: { value: '100.00' } });
+    await fireEvent.click(main().getByRole('button', { name: 'Save balance' }));
+    await main().findByText('Known balances');
+    await fireEvent.click(main().getByRole('button', { name: /^Edit balance for/ }));
+    const dlg = within(await screen.findByRole('dialog'));
+    // The form opens with the saved values.
+    expect((dlg.getByLabelText(/Balance at end of that day/) as HTMLInputElement).value).toBe('100.00');
+    await fireEvent.input(dlg.getByLabelText(/Balance at end of that day/), { target: { value: '-185.50' } });
+    await fireEvent.input(dlg.getByLabelText(/Note/), { target: { value: 'fixed' } });
+    await fireEvent.click(dlg.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(main().getByText('fixed')).toBeTruthy());
+    const detail = await (await import('./lib/api')).api.accountDetail('a-usd');
+    expect(detail.anchors.map((a) => [a.amount, a.note])).toEqual([[-18550, 'fixed']]);
+
+    // Moving it to another day replaces it rather than adding a second one.
+    await fireEvent.click(main().getByRole('button', { name: /^Edit balance for/ }));
+    const dlg2 = within(await screen.findByRole('dialog'));
+    await fireEvent.input(dlg2.getByLabelText('Date'), { target: { value: '2020-01-02' } });
+    await fireEvent.click(dlg2.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const moved = await (await import('./lib/api')).api.accountDetail('a-usd');
+    expect(moved.anchors.map((a) => a.date)).toEqual(['2020-01-02']);
+  });
+
+  it('refuses to move a known balance onto a day that already has one', async () => {
+    go('#/account/a-joint?tab=balance');
+    render(App);
+    await main().findByText('Known balances');
+    const { api } = await import('./lib/api');
+    const before = (await api.accountDetail('a-joint')).anchors;
+    expect(before.length).toBeGreaterThan(1);
+    await fireEvent.click(main().getAllByRole('button', { name: /^Edit balance for/ })[0]);
+    const dlg = within(await screen.findByRole('dialog'));
+    await fireEvent.input(dlg.getByLabelText('Date'), { target: { value: before[1].date } });
+    await fireEvent.click(dlg.getByRole('button', { name: 'Save' }));
+    expect(await dlg.findByText(/already a known balance/)).toBeTruthy();
+    expect((await api.accountDetail('a-joint')).anchors).toEqual(before);
+  });
+
   it('lets you set a starting balance on an unanchored account', async () => {
     go('#/account/a-usd?tab=balance');
     render(App);
@@ -186,6 +230,35 @@ describe('export dialog', () => {
   });
 });
 
+describe('sidebar', () => {
+  it('shows each account\'s owners as coloured avatars and describes the account in its tooltip', async () => {
+    render(App);
+    await main().findByText('Joint chequing');
+    const side = within(document.querySelector('aside') as HTMLElement);
+    const row = side.getByTitle(/^Joint chequing /);
+    const tip = row.getAttribute('title')!;
+    expect(tip).toContain('Desjardins · Chequing · CAD · •••• 2345');
+    expect(tip).toContain('Owners: Alex, Sam');
+    const avatars = [...row.querySelectorAll<HTMLElement>('.avatar')];
+    expect(avatars.map((a) => a.title)).toEqual(['Alex', 'Sam']);
+    // Same initial would be indistinguishable; the colours are what tell people apart.
+    expect(new Set(avatars.map((a) => a.style.background)).size).toBe(2);
+    // An account with a single owner shows one avatar.
+    expect(side.getByTitle(/^Alex savings /).querySelectorAll('.avatar').length).toBe(1);
+  });
+
+  it('groups accounts under their bank', async () => {
+    render(App);
+    await main().findByText('Joint chequing');
+    const side = within(document.querySelector('aside') as HTMLElement);
+    const desj = within(side.getByRole('navigation', { name: 'Desjardins accounts' }));
+    expect(desj.getByText('Joint chequing')).toBeTruthy();
+    expect(desj.getByText('Visa Desjardins')).toBeTruthy();
+    expect(desj.queryByText('Sam everyday')).toBeNull();
+    expect(within(side.getByRole('navigation', { name: 'Wealthsimple accounts' })).getByText('Sam everyday')).toBeTruthy();
+  });
+});
+
 describe('settings', () => {
   it('adds a person and shows them as a possible owner', async () => {
     go('#/settings');
@@ -197,10 +270,44 @@ describe('settings', () => {
     expect(await main().findByText('Jordan')).toBeTruthy();
   });
 
+  it('picks a colour when adding a person, defaulting to one nobody has', async () => {
+    go('#/settings');
+    render(App);
+    const input = await main().findByLabelText('Person name');
+    const form = within(input.closest('form') as HTMLElement);
+    // Alex is blue and Sam is green, so the suggestion is the next one.
+    expect(form.getByRole('radio', { name: 'Orange' }).getAttribute('aria-checked')).toBe('true');
+    await fireEvent.input(input, { target: { value: 'Arabel' } });
+    await fireEvent.click(form.getByRole('radio', { name: 'Purple' }));
+    expect(form.getByRole('radio', { name: 'Purple' }).getAttribute('aria-checked')).toBe('true');
+    await fireEvent.click(form.getByRole('button', { name: /Add/ }));
+    await main().findByText('Arabel');
+    expect(app.overview!.people.find((p) => p.name === 'Arabel')!.color).toBe('purple');
+
+    // Without touching the picker, the next person gets the suggested colour.
+    await fireEvent.input(main().getByLabelText('Person name'), { target: { value: 'Jo' } });
+    await fireEvent.click(within(main().getByLabelText('Person name').closest('form') as HTMLElement).getByRole('button', { name: /Add/ }));
+    await main().findByText('Jo');
+    expect(app.overview!.people.find((p) => p.name === 'Jo')!.color).toBe('orange');
+  });
+
+  it('changes a person\'s colour without touching their name', async () => {
+    go('#/settings');
+    render(App);
+    await fireEvent.click(await main().findByRole('button', { name: 'Edit Sam' }));
+    const dlg = within(await screen.findByRole('dialog'));
+    expect(dlg.getByRole('radio', { name: 'Green' }).getAttribute('aria-checked')).toBe('true');
+    await fireEvent.click(dlg.getByRole('radio', { name: 'Pink' }));
+    await fireEvent.click(dlg.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const sam = app.overview!.people.find((p) => p.id === 'p-sam')!;
+    expect([sam.name, sam.color]).toEqual(['Sam', 'pink']);
+  });
+
   it('renames a person and an account', async () => {
     go('#/settings');
     render(App);
-    await fireEvent.click(await main().findByRole('button', { name: 'Rename Sam' }));
+    await fireEvent.click(await main().findByRole('button', { name: 'Edit Sam' }));
     const dlg = within(await screen.findByRole('dialog'));
     await fireEvent.input(dlg.getByLabelText('Name'), { target: { value: 'Samantha' } });
     await fireEvent.click(dlg.getByRole('button', { name: 'Save' }));

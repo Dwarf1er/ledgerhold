@@ -19,6 +19,7 @@ import type {
   Person,
   Txn,
 } from './api';
+import { PERSON_COLORS, nextFreeColor } from './colors';
 import { parseISO, toISO } from './format';
 
 interface MockTxn {
@@ -51,8 +52,8 @@ export function createMockApi(opts: { today?: string } = {}): Api {
   const between = (lo: number, hi: number) => Math.round(lo + rand() * (hi - lo));
 
   const people: Person[] = [
-    { id: 'p-alex', name: 'Alex' },
-    { id: 'p-sam', name: 'Sam' },
+    { id: 'p-alex', name: 'Alex', color: 'blue' },
+    { id: 'p-sam', name: 'Sam', color: 'green' },
   ];
   const institutions: Institution[] = [
     { id: 'i-desj', name: 'Desjardins', bankId: '815' },
@@ -287,17 +288,20 @@ export function createMockApi(opts: { today?: string } = {}): Api {
       return delay(out);
     },
 
-    addPerson: async (name) => {
+    addPerson: async (name, color = null) => {
       if (!name.trim()) throw new Error('name is required');
-      const p = { id: id('p'), name: name.trim() };
+      if (color && !PERSON_COLORS.some((c) => c.key === color)) throw new Error(`unknown colour ${JSON.stringify(color)}`);
+      const p = { id: id('p'), name: name.trim(), color: color ?? nextFreeColor(people) };
       people.push(p);
       return delay(p);
     },
-    renamePerson: async (pid, name) => {
+    updatePerson: async (pid, name, color = null) => {
       if (!name.trim()) throw new Error('name is required');
+      if (color && !PERSON_COLORS.some((c) => c.key === color)) throw new Error(`unknown colour ${JSON.stringify(color)}`);
       const p = people.find((x) => x.id === pid);
       if (!p) throw new Error(`person ${pid} not found`);
       p.name = name.trim();
+      if (color) p.color = color;
       return delay({ ...p });
     },
     deletePerson: async (pid) => {
