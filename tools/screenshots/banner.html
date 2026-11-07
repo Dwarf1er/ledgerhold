@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: Geist; font-weight: 100 900;
+    src: url(../../ui/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2) format('woff2'); }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1280px; height: 640px; background: #000; color: #ededed; font-family: Geist, sans-serif;
+    position: relative; overflow: hidden; }
+  .glow { position: absolute; inset: 0;
+    background: radial-gradient(900px 500px at 15% 0%, #0b1d33 0%, transparent 70%); }
+  .copy { position: absolute; left: 80px; top: 0; bottom: 0; width: 520px; display: flex; flex-direction: column; justify-content: center; }
+  .mark { width: 88px; height: 88px; margin-bottom: 36px; }
+  h1 { font-size: 76px; font-weight: 650; letter-spacing: -0.045em; line-height: 1; }
+  p { margin-top: 24px; font-size: 27px; line-height: 1.4; color: #a1a1a1; letter-spacing: -0.01em; }
+  .tags { margin-top: 34px; display: flex; gap: 10px; }
+  .tags span { font-size: 17px; color: #c2c2c2; border: 1px solid #2e2e2e; border-radius: 999px; padding: 6px 14px; }
+  .shot { position: absolute; left: 650px; top: 96px; width: 900px; border-radius: 14px;
+    border: 1px solid #2e2e2e; box-shadow: 0 30px 80px rgba(0,0,0,.8), 0 0 0 1px #000; }
+  .fade { position: absolute; inset: 0; background: linear-gradient(90deg, #000 0, #000 38%, transparent 56%); }
+</style>
+<div class="glow"></div>
+<img class="shot" src="../../assets/screenshots/overview-dark.png">
+<div class="fade"></div>
+<div class="copy">
+  <img class="mark" src="../../assets/ledgerhold-mark.svg">
+  <h1>Ledgerhold</h1>
+  <p>Your household’s bank statements, kept in one place and exported as OFX.</p>
+  <div class="tags"><span>Dedup</span><span>Balances</span><span>Desktop &amp; Docker</span></div>
+</div>
