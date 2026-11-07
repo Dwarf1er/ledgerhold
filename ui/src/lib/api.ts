@@ -82,6 +82,7 @@ export interface BalancePoint {
   balance: number;
 }
 export interface PreviewRow {
+  index: number;
   date: string;
   amount: number;
   description: string;
@@ -138,7 +139,7 @@ export interface Api {
   balanceSeries(accountId: string, start: string, end: string): Promise<BalancePoint[]>;
   parsers(): Promise<Parser[]>;
   previewImport(accountId: string, path: string, parser?: string | null): Promise<ImportPreview>;
-  commitImport(accountId: string, path: string, parser?: string | null): Promise<ImportResult>;
+  commitImport(accountId: string, path: string, parser?: string | null, excluded?: number[]): Promise<ImportResult>;
   undoBatch(batchId: string): Promise<number>;
   setAnchor(accountId: string, date: string, amount: number, note?: string | null): Promise<void>;
   deleteAnchor(anchorId: string): Promise<void>;
@@ -212,8 +213,8 @@ export function backed(call: Call) {
     parsers: () => call<Parser[]>('parsers'),
     previewImport: (accountId: string, path: string, parser: string | null = null) =>
       call<ImportPreview>('preview_import', { accountId, path, parser }),
-    commitImport: (accountId: string, path: string, parser: string | null = null) =>
-      call<ImportResult>('commit_import', { accountId, path, parser }),
+    commitImport: (accountId: string, path: string, parser: string | null = null, excluded: number[] = []) =>
+      call<ImportResult>('commit_import', { accountId, path, parser, excluded }),
     undoBatch: (batchId: string) => call<number>('undo_batch', { batchId }),
     setAnchor: (accountId: string, date: string, amount: number, note: string | null = null) =>
       call<void>('set_anchor', { accountId, date, amount, note }),

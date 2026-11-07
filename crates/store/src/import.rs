@@ -157,6 +157,19 @@ impl Store {
     }
 
     pub fn import(&mut self, account_id: &str, meta: ImportMeta<'_>, st: &ParsedStatement) -> Result<ImportOutcome> {
+        self.import_except(account_id, meta, st, &[])
+    }
+
+    /// Like [`Store::import`], but leaves out the statement rows whose index (into
+    /// `st.transactions`, as shown in the preview) is in `excluded`. Those rows are
+    /// not stored, so a later import of the same file offers them again.
+    pub fn import_except(
+        &mut self,
+        account_id: &str,
+        meta: ImportMeta<'_>,
+        st: &ParsedStatement,
+        excluded: &[usize],
+    ) -> Result<ImportOutcome> {
         let account = self.get_account(account_id)?;
         check_compat(&account, st)?;
 
@@ -186,7 +199,7 @@ impl Store {
         let mut next_occ: HashMap<String, i64> = HashMap::new();
         let mut inserted = 0usize;
         for item in &plan.items {
-            if item.disposition != Disposition::New {
+            if item.disposition != Disposition::New || excluded.contains(&item.index) {
                 continue;
             }
             let t = &st.transactions[item.index];

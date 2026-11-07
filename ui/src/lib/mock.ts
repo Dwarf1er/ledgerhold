@@ -217,7 +217,7 @@ export function createMockApi(opts: { today?: string } = {}): Api {
       const rows = [
         ...existing.map((t) => ({ date: t.date, amount: t.amount, description: t.description, status: 'duplicate' as const })),
         ...fresh.map(([date, amount, description]) => ({ date, amount, description, status: 'new' as const })),
-      ];
+      ].map((r, index) => ({ index, ...r }));
       const name = path.split('/').pop() ?? path;
       const p: ImportPreview = {
         fileName: name,
@@ -235,19 +235,20 @@ export function createMockApi(opts: { today?: string } = {}): Api {
       return delay(p);
     },
 
-    commitImport: async (accountId, path, parser = null) => {
+    commitImport: async (accountId, path, parser = null, excluded = []) => {
       const preview = await api.previewImport(accountId, path, parser);
       const batchId = id('b');
-      for (const r of preview.rows.filter((x) => x.status === 'new')) {
+      const kept = preview.rows.filter((x) => x.status === 'new' && !excluded.includes(x.index));
+      for (const r of kept) {
         txns.get(accountId)!.push({ id: id('t'), date: r.date, amount: r.amount, description: r.description, batchId });
       }
       txns.get(accountId)!.sort(byDate);
       batches.get(accountId)!.push({
         id: batchId, parser: preview.parser, filename: preview.fileName, importedAt: `${today}T09:00:00Z`,
         periodStart: preview.period?.[0] ?? null, periodEnd: preview.period?.[1] ?? null,
-        rowsNew: preview.newCount, rowsDuplicate: preview.duplicateCount, rowsError: preview.errors.length,
+        rowsNew: kept.length, rowsDuplicate: preview.duplicateCount, rowsError: preview.errors.length,
       });
-      const r: ImportResult = { batchId, newCount: preview.newCount, duplicateCount: preview.duplicateCount, errorCount: preview.errors.length };
+      const r: ImportResult = { batchId, newCount: kept.length, duplicateCount: preview.duplicateCount, errorCount: preview.errors.length };
       return delay(r);
     },
 

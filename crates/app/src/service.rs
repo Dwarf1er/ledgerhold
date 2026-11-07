@@ -211,6 +211,7 @@ pub fn preview_import(store: &Store, account_id: &str, path: &Path, parser: Opti
         .map(|item| {
             let t = &l.statement.transactions[item.index];
             PreviewRow {
+                index: item.index,
                 date: t.date,
                 amount: t.amount.minor(),
                 description: t.description.clone(),
@@ -238,12 +239,19 @@ pub fn preview_import(store: &Store, account_id: &str, path: &Path, parser: Opti
     })
 }
 
-pub fn commit_import(store: &mut Store, account_id: &str, path: &Path, parser: Option<&str>) -> Result<ImportResultDto> {
+pub fn commit_import(
+    store: &mut Store,
+    account_id: &str,
+    path: &Path,
+    parser: Option<&str>,
+    excluded: &[usize],
+) -> Result<ImportResultDto> {
     let l = load(store, account_id, path, parser)?;
-    let o = store.import(
+    let o = store.import_except(
         account_id,
         ImportMeta { parser: &l.parser_id, filename: &l.file_name, file_sha256: &l.sha },
         &l.statement,
+        excluded,
     )?;
     Ok(ImportResultDto { batch_id: o.batch_id, new_count: o.new, duplicate_count: o.duplicates, error_count: o.errors })
 }

@@ -40,7 +40,7 @@ fn fx() -> Fx {
 }
 
 fn import_csv(f: &mut Fx) {
-    let r = commit_import(&mut f.store, &f.acct, &fixture("synthetic/desjardins.csv"), Some("desjardins")).unwrap();
+    let r = commit_import(&mut f.store, &f.acct, &fixture("synthetic/desjardins.csv"), Some("desjardins"), &[]).unwrap();
     assert_eq!(r.new_count, 10);
 }
 
@@ -278,4 +278,19 @@ fn database_location_follows_each_platforms_conventions() {
     // Nothing known: still produces a usable path.
     assert_eq!(p("linux", &env(&[])), "./ledgerhold/ledgerhold.sqlite");
     assert_eq!(p("windows", &env(&[("HOME", "/ignored")])), "./ledgerhold/ledgerhold.sqlite");
+}
+
+#[test]
+fn commit_leaves_out_excluded_rows_and_offers_them_again_later() {
+    let mut f = fx();
+    let path = fixture("synthetic/desjardins.csv");
+    let p = preview_import(&f.store, &f.acct, &path, Some("desjardins")).unwrap();
+    let skip: Vec<usize> = p.rows.iter().filter(|r| r.status == "new").take(2).map(|r| r.index).collect();
+    assert_eq!(skip.len(), 2);
+
+    let r = commit_import(&mut f.store, &f.acct, &path, Some("desjardins"), &skip).unwrap();
+    assert_eq!(r.new_count, p.new_count - 2);
+
+    let again = preview_import(&f.store, &f.acct, &path, Some("desjardins")).unwrap();
+    assert_eq!(again.new_count, 2);
 }

@@ -101,6 +101,9 @@ struct ImportArgs {
     account_id: String,
     path: String,
     parser: Option<String>,
+    /// Preview row indexes to leave out of a commit.
+    #[serde(default)]
+    excluded: Vec<usize>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -195,7 +198,7 @@ pub fn call(store: &mut Store, command: &str, a: Value, ctx: &RpcContext<'_>) ->
         "commit_import" => {
             let a: ImportArgs = args(a)?;
             let path = (ctx.resolve_path)(&a.path).map_err(|e| RpcError::Failed(format!("{e:#}")))?;
-            out(svc::commit_import(store, &a.account_id, &path, a.parser.as_deref()))
+            out(svc::commit_import(store, &a.account_id, &path, a.parser.as_deref(), &a.excluded))
         }
         "undo_batch" => {
             let a: BatchId = args(a)?;

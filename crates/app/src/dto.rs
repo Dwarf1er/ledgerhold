@@ -122,6 +122,8 @@ pub struct BalancePoint {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewRow {
+    /// Position in the statement; identifies the row when excluding it from the import.
+    pub index: usize,
     pub date: NaiveDate,
     pub amount: i64,
     pub description: String,

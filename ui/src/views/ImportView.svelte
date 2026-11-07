@@ -29,6 +29,8 @@
   let busy = $state(false);
   let error = $state<string | null>(null);
   let filter = $state<'all' | 'new' | 'duplicate'>('all');
+  // Preview rows (by statement index) the user has unticked; they are left out of the import.
+  let excluded = $state<number[]>([]);
   let limit = $state(300);
   let dragging = $state(false);
   let uploading = $state(false);
@@ -38,6 +40,9 @@
   const needsParser = $derived(!!path && !parser && !SELF_DESCRIBING.includes(extensionOf(path)));
   const canPreview = $derived(!!selected && !!path && !needsParser);
   const rows = $derived((preview?.rows ?? []).filter((r) => filter === 'all' || r.status === filter));
+  const importCount = $derived(preview ? preview.newCount - excluded.length : 0);
+  const visibleNew = $derived(rows.filter((r) => r.status === 'new'));
+  const allVisibleOn = $derived(visibleNew.length > 0 && visibleNew.every((r) => !excluded.includes(r.index)));
 
   onMount(() => {
     api.parsers().then((p) => (parsers = p)).catch(() => {});
@@ -111,6 +116,7 @@
       preview = await api.previewImport(selected, path, parser || null);
       filter = 'all';
       limit = 300;
+      excluded = [];
     } catch (e) {
       error = errMsg(e);
     } finally {
@@ -123,7 +129,7 @@
     busy = true;
     error = null;
     try {
-      result = await api.commitImport(selected, path, parser || null);
+      result = await api.commitImport(selected, path, parser || null, excluded);
       preview = null;
       await refresh();
       toast(`Imported ${result.newCount} transaction${result.newCount === 1 ? '' : 's'}`, 'success');
@@ -145,6 +151,16 @@
     } catch (e) {
       error = errMsg(e);
     }
+  }
+
+  function toggle(index: number) {
+    excluded = excluded.includes(index) ? excluded.filter((i) => i !== index) : [...excluded, index];
+  }
+
+  // Ticks or unticks every new row currently shown (respects the filter).
+  function toggleAll() {
+    const ids = visibleNew.map((r) => r.index);
+    excluded = allVisibleOn ? [...new Set([...excluded, ...ids])] : excluded.filter((i) => !ids.includes(i));
   }
 
   const meta = (p: ImportPreview) =>
@@ -246,6 +262,7 @@
     <section class="preview" aria-label="Import preview">
       <div class="sum">
         <div class="pill"><Badge tone="green">{preview.newCount} new</Badge></div>
+        {#if excluded.length}<div class="pill"><Badge tone="amber">{excluded.length} left out</Badge></div>{/if}
         <div class="pill"><Badge>{preview.duplicateCount} duplicate{preview.duplicateCount === 1 ? '' : 's'}</Badge></div>
         {#if preview.errors.length}<div class="pill"><Badge tone="amber">{preview.errors.length} unreadable</Badge></div>{/if}
         <span class="meta muted">
@@ -273,10 +290,30 @@
         </div>
         <div class="card tbl">
           <table>
-            <thead><tr><th class="d">Date</th><th>Description</th><th class="n">Amount</th><th class="s">Status</th></tr></thead>
+            <thead><tr>
+              <th class="c">
+                <input
+                  type="checkbox"
+                  aria-label="Import all new transactions shown"
+                  checked={allVisibleOn}
+                  disabled={visibleNew.length === 0}
+                  onchange={toggleAll}
+                />
+              </th>
+              <th class="d">Date</th><th>Description</th><th class="n">Amount</th><th class="s">Status</th></tr></thead>
             <tbody>
-              {#each rows.slice(0, limit) as r, i (i)}
-                <tr class:dup={r.status === 'duplicate'}>
+              {#each rows.slice(0, limit) as r (r.index)}
+                <tr class:dup={r.status === 'duplicate'} class:off={r.status === 'new' && excluded.includes(r.index)}>
+                  <td class="c">
+                    {#if r.status === 'new'}
+                      <input
+                        type="checkbox"
+                        aria-label="Import {r.description}"
+                        checked={!excluded.includes(r.index)}
+                        onchange={() => toggle(r.index)}
+                      />
+                    {/if}
+                  </td>
                   <td class="d muted">{formatShortDate(r.date)}</td>
                   <td class="desc">{r.description}</td>
                   <td class="n"><Money minor={r.amount} currency={preview.currency} tint /></td>
@@ -301,11 +338,15 @@
       {/if}
 
       <div class="confirm">
-        <Button variant="primary" loading={busy} disabled={preview.newCount === 0} onclick={commit}>
-          Import {preview.newCount} transaction{preview.newCount === 1 ? '' : 's'}
+        <Button variant="primary" loading={busy} disabled={importCount === 0} onclick={commit}>
+          Import {importCount} transaction{importCount === 1 ? '' : 's'}
         </Button>
         <Button variant="ghost" onclick={() => (preview = null)}>Cancel</Button>
-        {#if preview.newCount === 0}<span class="hint">Nothing new in this file.</span>{/if}
+        {#if preview.newCount === 0}
+          <span class="hint">Nothing new in this file.</span>
+        {:else if importCount === 0}
+          <span class="hint">Every new transaction is unticked.</span>
+        {/if}
       </div>
     </section>
   {/if}
@@ -389,6 +430,18 @@
   }
   tr.dup td:not(.s) {
     color: var(--fg-4);
+  }
+  .c {
+    width: 24px;
+    padding-right: 0;
+  }
+  .c input {
+    display: block;
+    margin: 0;
+  }
+  tr.off td:not(.c) {
+    color: var(--fg-4);
+    text-decoration: line-through;
   }
   .d {
     width: 100px;

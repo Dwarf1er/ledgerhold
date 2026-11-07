@@ -74,9 +74,15 @@ fn preview_import(state: State<'_, AppState>, account_id: String, path: String, 
 }
 
 #[tauri::command(async)]
-fn commit_import(state: State<'_, AppState>, account_id: String, path: String, parser: Option<String>) -> R<ImportResultDto> {
+fn commit_import(
+    state: State<'_, AppState>,
+    account_id: String,
+    path: String,
+    parser: Option<String>,
+    excluded: Option<Vec<usize>>,
+) -> R<ImportResultDto> {
     let mut store = lock(&state)?;
-    svc::commit_import(&mut store, &account_id, Path::new(&path), parser.as_deref()).map_err(msg)
+    svc::commit_import(&mut store, &account_id, Path::new(&path), parser.as_deref(), &excluded.unwrap_or_default()).map_err(msg)
 }
 
 #[tauri::command(async)]
