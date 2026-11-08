@@ -287,6 +287,31 @@ fn currency_and_card_vs_bank_mismatches_are_rejected() {
 }
 
 #[test]
+fn bank_style_statement_is_accepted_into_a_credit_card_account() {
+    // Some banks (seen in a Tangerine card export) write a card statement as a plain bank statement (STMTRS), which
+    // parses as "checking". That must import into a card account; the reverse stays rejected.
+    let mut f = fx();
+    let inst = f.inst.clone();
+    let card = f
+        .store
+        .add_account(&NewAccount {
+            institution_id: inst,
+            name: "Mastercard".into(),
+            kind: AccountKind::CreditCard,
+            currency: "CAD".into(),
+            external_account_id: None,
+            owners: vec![],
+            balance_only: false,
+        })
+        .unwrap();
+    let mut bank_style = stmt(vec![tx(1, -100, "A")]);
+    bank_style.kind = AccountKind::Checking;
+    let out = f.store.import(&card, meta("a", "h"), &bank_style).unwrap();
+    assert_eq!(out.new, 1);
+    assert!(f.store.preview_import(&card, &bank_style, "h2").is_ok());
+}
+
+#[test]
 fn csv_then_ofx_of_the_same_data_is_recognised_as_duplicates() {
     // Desjardins CSV (no bank ids) first, then the OFX version of the same
     // account (bank ids never seen before): nothing new.

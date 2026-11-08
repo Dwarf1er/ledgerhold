@@ -74,8 +74,11 @@ fn check_compat(account: &Account, st: &ParsedStatement) -> Result<()> {
     if account.currency != st.currency {
         return Err(StoreError::CurrencyMismatch { account: account.currency.clone(), statement: st.currency.clone() });
     }
-    // Checking vs savings can't be told apart from a file; a card vs a bank account can.
-    if (account.kind == AccountKind::CreditCard) != (st.kind == AccountKind::CreditCard) {
+    // Checking vs savings can't be told apart from a file. Neither can a card whose bank writes
+    // it as a plain bank statement (`STMTRS`; seen in a Tangerine card export), so a statement that looks like a
+    // bank account is accepted into a card account. A statement that says it is a card
+    // (`CCSTMTRS`) still must not go into a bank account.
+    if st.kind == AccountKind::CreditCard && account.kind != AccountKind::CreditCard {
         return Err(StoreError::KindMismatch {
             account: account.kind.as_str().into(),
             statement: st.kind.as_str().into(),
