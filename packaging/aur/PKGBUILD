@@ -23,10 +23,10 @@ source_aarch64=("$_release/Ledgerhold_${pkgver}_arm64.deb"
                 "$_release/ledgerhold-cli-$pkgver-linux-arm64.tar.gz")
 noextract=("Ledgerhold_${pkgver}_amd64.deb" "Ledgerhold_${pkgver}_arm64.deb")
 sha256sums=('708888760e9cb6750ac04a6277eba699ab2c9df3afeb4d74d8dcb2deefd98aaa')
-sha256sums_x86_64=('b76b3035688988b7fee94258a194f771d3ac3c4f415a45b46449f8a793ef8825'
-                   '5d42dba81bb35640e9e124dac4bd71b744795161a389857389795d7e52665128')
-sha256sums_aarch64=('b63192263dc78b385723aae79c862d6ab83316d69c37aabc5f9dda75effaee34'
-                    '44d3e263ee85cd6cd09adaaaffdf8fbaddadc67a9916347015abf9bb10e770bf')
+sha256sums_x86_64=('15b8ca2f657c17dbcc2df575c2439593b76626822b908470a362e776e4b730bf'
+                   '972968a678187a0f46ca0ff8f9549ae52b03dba85ebd81a611fdb5c25a2f9762')
+sha256sums_aarch64=('18094a862c1a9bbb6273f59fb9b6afe5f459763111aa246f1c2904d9ec40ae72'
+                    'e409586a438a7061365ace6610ba179909c73dfc0dd2fa54d0aaecb8068610a3')
 
 package() {
   case "$CARCH" in

@@ -62,6 +62,7 @@ the whole household opens in a browser.
 
 ## What's included
 
+| Part | What it is |
 | --- | --- |
 | **Desktop app** | The full interface as a native window (Tauri), with file pickers and folder export. Linux, macOS and Windows. |
 | **`ledgerhold`** | The same features on the command line: import, undo, balances, reconcile, export. A single self-contained file. |
